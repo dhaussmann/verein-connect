@@ -9,6 +9,8 @@ import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
 import Dashboard from "@/pages/Dashboard";
 import Members from "@/pages/Members";
+import MemberDetail from "@/pages/MemberDetail";
+import MemberNew from "@/pages/MemberNew";
 import StubPage from "@/pages/StubPage";
 import NotFound from "@/pages/NotFound";
 
