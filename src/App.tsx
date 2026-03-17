@@ -51,18 +51,18 @@ const App = () => (
             <Route path="/events" element={<Events />} />
             <Route path="/events/new" element={<CourseNew />} />
             <Route path="/events/:id" element={<EventDetail />} />
-            <Route path="/attendance" element={<StubPage title="Anwesenheit" />} />
-            <Route path="/attendance/:eventId" element={<StubPage title="Check-In" />} />
-            <Route path="/communication" element={<StubPage title="Kommunikation" />} />
-            <Route path="/communication/chat" element={<StubPage title="Chat" />} />
-            <Route path="/communication/email" element={<StubPage title="E-Mail" />} />
-            <Route path="/finance" element={<StubPage title="Finanzen" />} />
-            <Route path="/finance/accounting" element={<StubPage title="Buchhaltung" />} />
-            <Route path="/shop" element={<StubPage title="Webshop" />} />
-            <Route path="/files" element={<StubPage title="Materialbank" />} />
-            <Route path="/settings" element={<StubPage title="Einstellungen" />} />
-            <Route path="/settings/roles" element={<StubPage title="Rollen & Berechtigungen" />} />
-            <Route path="/settings/fields" element={<StubPage title="Profilfelder" />} />
+            <Route path="/attendance" element={<Attendance />} />
+            <Route path="/attendance/:eventId" element={<AttendanceCheckIn />} />
+            <Route path="/communication" element={<Communication />} />
+            <Route path="/communication/chat" element={<Communication />} />
+            <Route path="/communication/email" element={<Communication />} />
+            <Route path="/finance" element={<Finance />} />
+            <Route path="/finance/accounting" element={<Finance />} />
+            <Route path="/shop" element={<Shop />} />
+            <Route path="/files" element={<Files />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/settings/roles" element={<Settings />} />
+            <Route path="/settings/fields" element={<Settings />} />
           </Route>
 
           <Route path="*" element={<NotFound />} />
