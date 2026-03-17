@@ -1,55 +1,41 @@
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, GraduationCap, Calendar, Receipt } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { Users, GraduationCap, Calendar, Receipt, TrendingUp } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { upcomingEvents, recentActivities, memberGrowthData } from '@/data/mockData';
+import { Badge } from '@/components/ui/badge';
 
-const stats = [
-  { label: 'Mitglieder', value: '248', change: '+12 diesen Monat', icon: Users, color: 'text-primary' },
-  { label: 'Aktive Kurse', value: '16', change: '3 diese Woche', icon: GraduationCap, color: 'text-primary-light' },
-  { label: 'Termine', value: '8', change: 'Nächste 7 Tage', icon: Calendar, color: 'text-success' },
-  { label: 'Offene Rechnungen', value: '1.240,00 €', change: '5 überfällig', icon: Receipt, color: 'text-warning' },
+const kpis = [
+  { label: 'Aktive Mitglieder', value: '247', sub: '+12 diesen Monat', icon: Users, trend: true, highlight: true },
+  { label: 'Offene Kurse', value: '18', sub: '3 diese Woche', icon: GraduationCap },
+  { label: 'Nächster Termin', value: 'Heute 18:00', sub: 'A-Jugend Training', icon: Calendar },
+  { label: 'Offene Rechnungen', value: '2.450 €', sub: '14 ausstehend', icon: Receipt, warning: true },
 ];
 
-const memberData = [
-  { month: 'Jan', count: 210 }, { month: 'Feb', count: 218 }, { month: 'Mär', count: 225 },
-  { month: 'Apr', count: 230 }, { month: 'Mai', count: 235 }, { month: 'Jun', count: 248 },
-];
-
-const categoryData = [
-  { name: 'Erwachsene', value: 120 },
-  { name: 'Jugend', value: 68 },
-  { name: 'Kinder', value: 45 },
-  { name: 'Senioren', value: 15 },
-];
-
-const COLORS = ['hsl(207,62%,28%)', 'hsl(207,62%,47%)', 'hsl(145,63%,32%)', 'hsl(48,90%,44%)'];
-
-const recentActivity = [
-  { text: 'Anna Schmidt wurde als Mitglied aufgenommen', time: 'Vor 2 Stunden' },
-  { text: 'Kurs "Yoga Montag" hat 3 neue Teilnehmer', time: 'Vor 4 Stunden' },
-  { text: 'Rechnung #2024-089 wurde bezahlt (45,00 €)', time: 'Gestern' },
-  { text: 'Termin "Jahreshauptversammlung" erstellt', time: 'Gestern' },
-  { text: 'Peter Weber hat seine Adresse aktualisiert', time: 'Vor 2 Tagen' },
-];
+const eventStatusClass = (s: string) =>
+  s === 'Offen' ? 'bg-success/10 text-success' : s === 'Voll' ? 'bg-primary-lightest text-primary' : 'bg-destructive/10 text-destructive';
 
 export default function Dashboard() {
   return (
     <div>
       <PageHeader title="Dashboard" />
 
-      {/* Stats */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {stats.map((s) => (
-          <Card key={s.label} className="bg-popover shadow-sm">
+        {kpis.map((k) => (
+          <Card key={k.label} className={`shadow-sm ${k.highlight ? 'bg-primary-lightest' : 'bg-popover'}`}>
             <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{s.label}</p>
-                  <p className="text-2xl font-semibold mt-1">{s.value}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{s.change}</p>
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">{k.label}</p>
+                  <p className="text-2xl font-semibold">{k.value}</p>
+                  <p className={`text-xs flex items-center gap-1 ${k.warning ? 'text-warning' : k.trend ? 'text-success' : 'text-muted-foreground'}`}>
+                    {k.trend && <TrendingUp className="h-3 w-3" />}
+                    {k.sub}
+                  </p>
                 </div>
-                <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center">
-                  <s.icon className={`h-5 w-5 ${s.color}`} />
+                <div className="w-10 h-10 rounded-lg bg-popover/80 flex items-center justify-center">
+                  <k.icon className="h-5 w-5 text-primary" />
                 </div>
               </div>
             </CardContent>
@@ -57,45 +43,60 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Charts */}
+      {/* Middle: Events + Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        {/* Upcoming Events */}
         <Card className="lg:col-span-2 bg-popover shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">Mitgliederentwicklung</CardTitle>
+            <CardTitle className="text-base font-semibold">Kommende Termine</CardTitle>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={memberData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(210,10%,85%)" />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="hsl(212,15%,43%)" />
-                <YAxis tick={{ fontSize: 12 }} stroke="hsl(212,15%,43%)" />
-                <Tooltip />
-                <Bar dataKey="count" fill="hsl(207,62%,28%)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <CardContent className="p-0">
+            <div className="divide-y divide-border">
+              {upcomingEvents.map((ev) => {
+                const [day, month] = ev.date.split('.');
+                const monthNames = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+                return (
+                  <div key={ev.id} className="flex items-center gap-4 px-4 py-3 hover:bg-muted/50 transition-colors">
+                    <div className="w-12 h-12 rounded-lg bg-accent flex flex-col items-center justify-center shrink-0">
+                      <span className="text-sm font-semibold leading-none text-primary">{day}</span>
+                      <span className="text-xs text-primary/70">{monthNames[parseInt(month)]}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{ev.title}</p>
+                      <p className="text-xs text-muted-foreground">{ev.time} Uhr · {ev.type}</p>
+                    </div>
+                    <div className="text-xs text-muted-foreground whitespace-nowrap">
+                      {ev.participants}/{ev.maxParticipants}
+                    </div>
+                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${eventStatusClass(ev.status)}`}>
+                      {ev.status}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
 
+        {/* Activity Feed */}
         <Card className="bg-popover shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">Altersgruppen</CardTitle>
+            <CardTitle className="text-base font-semibold">Letzte Aktivitäten</CardTitle>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie data={categoryData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value">
-                  {categoryData.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="grid grid-cols-2 gap-1 mt-2">
-              {categoryData.map((c, i) => (
-                <div key={c.name} className="flex items-center gap-1.5 text-xs">
-                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[i] }} />
-                  <span className="text-muted-foreground">{c.name}: {c.value}</span>
+          <CardContent className="p-0">
+            <div className="divide-y divide-border">
+              {recentActivities.map((a) => (
+                <div key={a.id} className="flex items-start gap-3 px-4 py-3">
+                  <div className="w-8 h-8 rounded-full bg-primary-light flex items-center justify-center shrink-0 mt-0.5">
+                    <span className="text-primary-foreground text-xs font-semibold">{a.initials}</span>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm">
+                      <span className="font-medium">{a.memberName}</span>{' '}
+                      <span className="text-muted-foreground">{a.action}</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{a.time}</p>
+                  </div>
                 </div>
               ))}
             </div>
@@ -103,20 +104,23 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Activity */}
+      {/* Member Growth Chart */}
       <Card className="bg-popover shadow-sm">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">Letzte Aktivitäten</CardTitle>
+          <CardTitle className="text-base font-semibold">Mitgliederentwicklung (letzte 12 Monate)</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {recentActivity.map((a, i) => (
-              <div key={i} className="flex items-start justify-between gap-4 py-2 border-b border-border last:border-0">
-                <p className="text-sm">{a.text}</p>
-                <span className="text-xs text-muted-foreground whitespace-nowrap">{a.time}</span>
-              </div>
-            ))}
-          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={memberGrowthData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(210,10%,85%)" />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="hsl(212,15%,43%)" />
+              <YAxis tick={{ fontSize: 12 }} stroke="hsl(212,15%,43%)" />
+              <Tooltip />
+              <Legend />
+              <Line type="monotone" dataKey="newMembers" name="Neuanmeldungen" stroke="hsl(207,62%,28%)" strokeWidth={2} dot={{ r: 4 }} />
+              <Line type="monotone" dataKey="departures" name="Abgänge" stroke="hsl(4,64%,46%)" strokeWidth={2} dot={{ r: 4 }} />
+            </LineChart>
+          </ResponsiveContainer>
         </CardContent>
       </Card>
     </div>
