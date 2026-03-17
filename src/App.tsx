@@ -38,10 +38,12 @@ const App = () => (
             <Route path="/members" element={<Members />} />
             <Route path="/members/new" element={<MemberNew />} />
             <Route path="/members/:id" element={<MemberDetail />} />
-            <Route path="/courses" element={<StubPage title="Kurse" />} />
-            <Route path="/courses/:id" element={<StubPage title="Kurs-Detail" />} />
-            <Route path="/events" element={<StubPage title="Termine" />} />
-            <Route path="/events/:id" element={<StubPage title="Termin-Detail" />} />
+            <Route path="/courses" element={<Courses />} />
+            <Route path="/courses/new" element={<CourseNew />} />
+            <Route path="/courses/:id" element={<CourseDetail />} />
+            <Route path="/events" element={<Events />} />
+            <Route path="/events/new" element={<CourseNew />} />
+            <Route path="/events/:id" element={<EventDetail />} />
             <Route path="/attendance" element={<StubPage title="Anwesenheit" />} />
             <Route path="/attendance/:eventId" element={<StubPage title="Check-In" />} />
             <Route path="/communication" element={<StubPage title="Kommunikation" />} />
