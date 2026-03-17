@@ -11,6 +11,11 @@ import Dashboard from "@/pages/Dashboard";
 import Members from "@/pages/Members";
 import MemberDetail from "@/pages/MemberDetail";
 import MemberNew from "@/pages/MemberNew";
+import Courses from "@/pages/Courses";
+import CourseDetail from "@/pages/CourseDetail";
+import CourseNew from "@/pages/CourseNew";
+import Events from "@/pages/Events";
+import EventDetail from "@/pages/EventDetail";
 import StubPage from "@/pages/StubPage";
 import NotFound from "@/pages/NotFound";
 
