@@ -16,6 +16,13 @@ import CourseDetail from "@/pages/CourseDetail";
 import CourseNew from "@/pages/CourseNew";
 import Events from "@/pages/Events";
 import EventDetail from "@/pages/EventDetail";
+import Attendance from "@/pages/Attendance";
+import AttendanceCheckIn from "@/pages/AttendanceCheckIn";
+import Communication from "@/pages/Communication";
+import Finance from "@/pages/Finance";
+import Shop from "@/pages/Shop";
+import Files from "@/pages/Files";
+import Settings from "@/pages/Settings";
 import StubPage from "@/pages/StubPage";
 import NotFound from "@/pages/NotFound";
 
