@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,28 +10,41 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Textarea } from '@/components/ui/textarea';
-import { Receipt, TrendingUp, AlertTriangle, DollarSign, Plus, MoreHorizontal, FileDown, Mail, Ban, CheckCircle, Search } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { invoices, accountingEntries, monthlyFinances, accountingCategories, type FinanceInvoice } from '@/data/financeData';
+import { Receipt, TrendingUp, AlertTriangle, Plus, MoreHorizontal, FileDown, Mail, Ban, CheckCircle, Search, Trash2 } from 'lucide-react';
+import { useInvoices, useAccounting, useMarkInvoicePaid, useDeleteInvoice, useCreateAccountingEntry } from '@/hooks/use-api';
+import type { Invoice } from '@/lib/api';
+import { toast } from 'sonner';
+
+const accountingCategories = [
+  'Mitgliedsbeiträge', 'Kursgebühren', 'Sponsoring', 'Veranstaltungen',
+  'Hallenmiete', 'Material', 'Versicherung', 'Personal', 'Sonstiges',
+];
 
 export default function Finance() {
   const [invoiceFilter, setInvoiceFilter] = useState('all');
   const [invoiceSearch, setInvoiceSearch] = useState('');
-  const [detailInvoice, setDetailInvoice] = useState<FinanceInvoice | null>(null);
+  const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
   const [newEntryOpen, setNewEntryOpen] = useState(false);
+  const [entryForm, setEntryForm] = useState({ date: '', type: '', category: '', description: '', amount: '' });
 
-  const totalOpen = invoices.filter(i => i.status === 'Gesendet').reduce((s, i) => s + i.amountRaw, 0);
-  const totalOverdue = invoices.filter(i => i.status === 'Überfällig').reduce((s, i) => s + i.amountRaw, 0);
-  const totalPaid = invoices.filter(i => i.status === 'Bezahlt').reduce((s, i) => s + i.amountRaw, 0);
-  const totalYear = invoices.reduce((s, i) => s + i.amountRaw, 0);
+  const { data: invoicesData, isLoading: invoicesLoading } = useInvoices({ per_page: '200' });
+  const invoices = invoicesData?.data ?? [];
+  const summary = (invoicesData as any)?.summary ?? { total_open: 0, total_paid: 0, total_overdue: 0 };
+
+  const { data: accountingData } = useAccounting();
+  const acctEntries = (accountingData as any)?.entries ?? [];
+  const acctSummary = (accountingData as any)?.summary ?? { income: 0, expense: 0, balance: 0 };
+
+  const markPaid = useMarkInvoicePaid();
+  const deleteInvoice = useDeleteInvoice();
+  const createEntry = useCreateAccountingEntry();
 
   const fmt = (n: number) => n.toLocaleString('de-DE', { minimumFractionDigits: 2 }) + ' €';
 
-  const filteredInvoices = invoices.filter(i =>
+  const filteredInvoices = useMemo(() => invoices.filter((i: Invoice) =>
     (invoiceFilter === 'all' || i.status === invoiceFilter) &&
     (i.number.toLowerCase().includes(invoiceSearch.toLowerCase()) || i.memberName.toLowerCase().includes(invoiceSearch.toLowerCase()))
-  );
+  ), [invoices, invoiceFilter, invoiceSearch]);
 
   const statusColor = (s: string) => {
     const map: Record<string, string> = {
@@ -44,8 +57,36 @@ export default function Finance() {
     return map[s] || '';
   };
 
-  const totalIncome = accountingEntries.filter(e => e.type === 'Einnahme').reduce((s, e) => s + e.amountRaw, 0);
-  const totalExpenses = accountingEntries.filter(e => e.type === 'Ausgabe').reduce((s, e) => s + e.amountRaw, 0);
+  const handleMarkPaid = async (id: string) => {
+    try {
+      await markPaid.mutateAsync(id);
+      toast.success('Rechnung als bezahlt markiert');
+    } catch { toast.error('Fehler beim Markieren'); }
+  };
+
+  const handleDeleteInvoice = async (id: string) => {
+    if (!confirm('Rechnung wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) return;
+    try {
+      await deleteInvoice.mutateAsync(id);
+      toast.success('Rechnung gelöscht');
+      setDetailInvoice(null);
+    } catch { toast.error('Fehler beim Löschen'); }
+  };
+
+  const handleCreateEntry = async () => {
+    try {
+      await createEntry.mutateAsync({
+        entry_date: entryForm.date,
+        type: entryForm.type === 'Einnahme' ? 'income' : 'expense',
+        category: entryForm.category,
+        description: entryForm.description,
+        amount: parseFloat(entryForm.amount) || 0,
+      });
+      toast.success('Buchungseintrag erstellt');
+      setNewEntryOpen(false);
+      setEntryForm({ date: '', type: '', category: '', description: '', amount: '' });
+    } catch { toast.error('Fehler beim Erstellen'); }
+  };
 
   return (
     <div>
@@ -56,25 +97,25 @@ export default function Finance() {
         <Card className="border border-border">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="p-2 rounded-lg bg-warning/10"><Receipt className="h-5 w-5 text-warning" /></div>
-            <div><p className="text-sm text-muted-foreground">Offene Rechnungen</p><p className="text-xl font-bold text-warning">{fmt(totalOpen)}</p><p className="text-xs text-muted-foreground">{invoices.filter(i => i.status === 'Gesendet').length} ausstehend</p></div>
+            <div><p className="text-sm text-muted-foreground">Offene Rechnungen</p><p className="text-xl font-bold text-warning">{fmt(summary.total_open)}</p></div>
           </CardContent>
         </Card>
         <Card className="border border-border">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="p-2 rounded-lg bg-success/10"><CheckCircle className="h-5 w-5 text-success" /></div>
-            <div><p className="text-sm text-muted-foreground">Bezahlt (Monat)</p><p className="text-xl font-bold text-success">{fmt(totalPaid)}</p></div>
+            <div><p className="text-sm text-muted-foreground">Bezahlt</p><p className="text-xl font-bold text-success">{fmt(summary.total_paid)}</p></div>
           </CardContent>
         </Card>
         <Card className="border border-border">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="p-2 rounded-lg bg-destructive/10"><AlertTriangle className="h-5 w-5 text-destructive" /></div>
-            <div><p className="text-sm text-muted-foreground">Überfällig</p><p className="text-xl font-bold text-destructive">{fmt(totalOverdue)}</p><p className="text-xs text-muted-foreground">{invoices.filter(i => i.status === 'Überfällig').length} Rechnungen</p></div>
+            <div><p className="text-sm text-muted-foreground">Überfällig</p><p className="text-xl font-bold text-destructive">{fmt(summary.total_overdue)}</p></div>
           </CardContent>
         </Card>
         <Card className="border border-border">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10"><TrendingUp className="h-5 w-5 text-primary" /></div>
-            <div><p className="text-sm text-muted-foreground">Jahresumsatz</p><p className="text-xl font-bold">{fmt(totalYear)}</p></div>
+            <div><p className="text-sm text-muted-foreground">Gesamt</p><p className="text-xl font-bold">{fmt(summary.total_open + summary.total_paid + summary.total_overdue)}</p></div>
           </CardContent>
         </Card>
       </div>
@@ -106,75 +147,66 @@ export default function Finance() {
           </div>
 
           <Card className="border border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Rechnungsnr.</TableHead>
-                  <TableHead>Mitglied</TableHead>
-                  <TableHead>Datum</TableHead>
-                  <TableHead>Fällig</TableHead>
-                  <TableHead className="text-right">Betrag</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-12"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredInvoices.map((inv, i) => (
-                  <TableRow key={inv.id} className={i % 2 === 1 ? 'bg-muted/50' : ''}>
-                    <TableCell>
-                      <button className="text-primary hover:underline font-medium" onClick={() => setDetailInvoice(inv)}>{inv.number}</button>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-7 w-7"><AvatarFallback className="bg-primary-lightest text-primary text-xs">{inv.memberInitials}</AvatarFallback></Avatar>
-                        <span className="text-sm">{inv.memberName}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{inv.date}</TableCell>
-                    <TableCell className="text-muted-foreground">{inv.dueDate}</TableCell>
-                    <TableCell className="text-right font-medium">{inv.amount}</TableCell>
-                    <TableCell><Badge variant="outline" className={statusColor(inv.status)}>{inv.status}</Badge></TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem><FileDown className="h-4 w-4 mr-2" /> PDF herunterladen</DropdownMenuItem>
-                          <DropdownMenuItem><Mail className="h-4 w-4 mr-2" /> Mahnung senden</DropdownMenuItem>
-                          <DropdownMenuItem><CheckCircle className="h-4 w-4 mr-2" /> Bezahlt markieren</DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive"><Ban className="h-4 w-4 mr-2" /> Stornieren</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+            {invoicesLoading ? (
+              <div className="p-8 text-center text-muted-foreground text-sm">Rechnungen werden geladen...</div>
+            ) : filteredInvoices.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground text-sm">Keine Rechnungen vorhanden.</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Rechnungsnr.</TableHead>
+                    <TableHead>Mitglied</TableHead>
+                    <TableHead>Datum</TableHead>
+                    <TableHead>Fällig</TableHead>
+                    <TableHead className="text-right">Betrag</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-12"></TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredInvoices.map((inv: Invoice, i: number) => (
+                    <TableRow key={inv.id} className={i % 2 === 1 ? 'bg-muted/50' : ''}>
+                      <TableCell>
+                        <button className="text-primary hover:underline font-medium" onClick={() => setDetailInvoice(inv)}>{inv.number}</button>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-7 w-7"><AvatarFallback className="bg-primary-lightest text-primary text-xs">{inv.memberInitials}</AvatarFallback></Avatar>
+                          <span className="text-sm">{inv.memberName}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{inv.date}</TableCell>
+                      <TableCell className="text-muted-foreground">{inv.dueDate}</TableCell>
+                      <TableCell className="text-right font-medium">{inv.amount}</TableCell>
+                      <TableCell><Badge variant="outline" className={statusColor(inv.status)}>{inv.status}</Badge></TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem><FileDown className="h-4 w-4 mr-2" /> PDF herunterladen</DropdownMenuItem>
+                            <DropdownMenuItem><Mail className="h-4 w-4 mr-2" /> Mahnung senden</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleMarkPaid(inv.id)}><CheckCircle className="h-4 w-4 mr-2" /> Bezahlt markieren</DropdownMenuItem>
+                            <DropdownMenuItem className="text-destructive"><Ban className="h-4 w-4 mr-2" /> Stornieren</DropdownMenuItem>
+                            <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteInvoice(inv.id)}><Trash2 className="h-4 w-4 mr-2" /> Löschen</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </Card>
         </TabsContent>
 
         {/* BUCHHALTUNG */}
         <TabsContent value="accounting">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            <Card className="border border-border"><CardContent className="p-4"><p className="text-sm text-muted-foreground">Einnahmen (Monat)</p><p className="text-xl font-bold text-success">{fmt(totalIncome)}</p></CardContent></Card>
-            <Card className="border border-border"><CardContent className="p-4"><p className="text-sm text-muted-foreground">Ausgaben (Monat)</p><p className="text-xl font-bold text-destructive">{fmt(totalExpenses)}</p></CardContent></Card>
-            <Card className="border border-border"><CardContent className="p-4"><p className="text-sm text-muted-foreground">Saldo</p><p className={`text-xl font-bold ${totalIncome - totalExpenses >= 0 ? 'text-success' : 'text-destructive'}`}>{fmt(totalIncome - totalExpenses)}</p></CardContent></Card>
+            <Card className="border border-border"><CardContent className="p-4"><p className="text-sm text-muted-foreground">Einnahmen</p><p className="text-xl font-bold text-success">{fmt(acctSummary.income)}</p></CardContent></Card>
+            <Card className="border border-border"><CardContent className="p-4"><p className="text-sm text-muted-foreground">Ausgaben</p><p className="text-xl font-bold text-destructive">{fmt(acctSummary.expense)}</p></CardContent></Card>
+            <Card className="border border-border"><CardContent className="p-4"><p className="text-sm text-muted-foreground">Saldo</p><p className={`text-xl font-bold ${acctSummary.balance >= 0 ? 'text-success' : 'text-destructive'}`}>{fmt(acctSummary.balance)}</p></CardContent></Card>
           </div>
-
-          <Card className="border border-border mb-6">
-            <CardHeader><CardTitle className="text-base">Einnahmen vs. Ausgaben</CardTitle></CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={monthlyFinances}>
-                  <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip formatter={(v: number) => fmt(v)} />
-                  <Legend />
-                  <Bar dataKey="income" name="Einnahmen" fill="hsl(145,63%,32%)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="expenses" name="Ausgaben" fill="hsl(4,64%,46%)" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
 
           <div className="flex justify-between items-center mb-4">
             <h3 className="font-semibold text-foreground">Buchungseinträge</h3>
@@ -185,28 +217,32 @@ export default function Finance() {
           </div>
 
           <Card className="border border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Datum</TableHead>
-                  <TableHead>Typ</TableHead>
-                  <TableHead>Kategorie</TableHead>
-                  <TableHead>Beschreibung</TableHead>
-                  <TableHead className="text-right">Betrag</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {accountingEntries.map((e, i) => (
-                  <TableRow key={e.id} className={i % 2 === 1 ? 'bg-muted/50' : ''}>
-                    <TableCell className="text-muted-foreground">{e.date}</TableCell>
-                    <TableCell><Badge variant="outline" className={e.type === 'Einnahme' ? 'bg-success/10 text-success border-success/30' : 'bg-destructive/10 text-destructive border-destructive/30'}>{e.type}</Badge></TableCell>
-                    <TableCell><Badge variant="secondary">{e.category}</Badge></TableCell>
-                    <TableCell>{e.description}</TableCell>
-                    <TableCell className={`text-right font-medium ${e.type === 'Einnahme' ? 'text-success' : 'text-destructive'}`}>{e.type === 'Ausgabe' ? '-' : '+'}{e.amount}</TableCell>
+            {acctEntries.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground text-sm">Keine Buchungseinträge vorhanden.</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Datum</TableHead>
+                    <TableHead>Typ</TableHead>
+                    <TableHead>Kategorie</TableHead>
+                    <TableHead>Beschreibung</TableHead>
+                    <TableHead className="text-right">Betrag</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {acctEntries.map((e: any, i: number) => (
+                    <TableRow key={e.id} className={i % 2 === 1 ? 'bg-muted/50' : ''}>
+                      <TableCell className="text-muted-foreground">{e.date}</TableCell>
+                      <TableCell><Badge variant="outline" className={e.type === 'Einnahme' ? 'bg-success/10 text-success border-success/30' : 'bg-destructive/10 text-destructive border-destructive/30'}>{e.type}</Badge></TableCell>
+                      <TableCell><Badge variant="secondary">{e.category}</Badge></TableCell>
+                      <TableCell>{e.description}</TableCell>
+                      <TableCell className={`text-right font-medium ${e.type === 'Einnahme' ? 'text-success' : 'text-destructive'}`}>{e.type === 'Ausgabe' ? '-' : '+'}{e.amount}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </Card>
         </TabsContent>
       </Tabs>
@@ -221,37 +257,39 @@ export default function Finance() {
               </DialogHeader>
               <div className="space-y-4">
                 <div className="flex justify-between text-sm">
-                  <div><p className="font-medium">TSV Beispielverein 1900 e.V.</p><p className="text-muted-foreground">Hauptstraße 1, 80331 München</p></div>
+                  <div><p className="font-medium">{detailInvoice.memberName}</p></div>
                   <div className="text-right"><p>Rechnungsnr.: {detailInvoice.number}</p><p className="text-muted-foreground">Datum: {detailInvoice.date}</p></div>
                 </div>
-                <div className="text-sm"><p className="font-medium">An:</p><p>{detailInvoice.memberName}</p></div>
-                <Table>
-                  <TableHeader><TableRow><TableHead>Beschreibung</TableHead><TableHead className="text-center">Menge</TableHead><TableHead className="text-right">Einzelpreis</TableHead><TableHead className="text-right">Gesamt</TableHead></TableRow></TableHeader>
-                  <TableBody>
-                    {detailInvoice.positions.map((p, i) => (
-                      <TableRow key={i}><TableCell>{p.description}</TableCell><TableCell className="text-center">{p.quantity}</TableCell><TableCell className="text-right">{p.unitPrice}</TableCell><TableCell className="text-right">{p.total}</TableCell></TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                {detailInvoice.positions && detailInvoice.positions.length > 0 && (
+                  <Table>
+                    <TableHeader><TableRow><TableHead>Beschreibung</TableHead><TableHead className="text-center">Menge</TableHead><TableHead className="text-right">Einzelpreis</TableHead><TableHead className="text-right">Gesamt</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {detailInvoice.positions.map((p, i) => (
+                        <TableRow key={i}><TableCell>{p.description}</TableCell><TableCell className="text-center">{p.quantity}</TableCell><TableCell className="text-right">{p.unitPrice}</TableCell><TableCell className="text-right">{p.total}</TableCell></TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
                 <div className="text-right space-y-1 text-sm border-t border-border pt-3">
-                  <p>Zwischensumme: {detailInvoice.amount}</p>
-                  <p className="text-muted-foreground">MwSt. (0%): 0,00 €</p>
                   <p className="text-lg font-bold">Gesamt: {detailInvoice.amount}</p>
                 </div>
-                <div className="flex items-center gap-4 text-sm">
-                  {detailInvoice.timeline.map((t, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <div className={`h-3 w-3 rounded-full ${t.date ? 'bg-success' : 'bg-border'}`} />
-                      <div><p className="font-medium">{t.step}</p>{t.date && <p className="text-xs text-muted-foreground">{t.date}</p>}</div>
-                      {i < detailInvoice.timeline.length - 1 && <div className="h-px w-8 bg-border" />}
-                    </div>
-                  ))}
-                </div>
+                {detailInvoice.timeline && detailInvoice.timeline.length > 0 && (
+                  <div className="flex items-center gap-4 text-sm">
+                    {detailInvoice.timeline.map((t, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <div className={`h-3 w-3 rounded-full ${t.date ? 'bg-success' : 'bg-border'}`} />
+                        <div><p className="font-medium">{t.step}</p>{t.date && <p className="text-xs text-muted-foreground">{t.date}</p>}</div>
+                        {i < detailInvoice.timeline.length - 1 && <div className="h-px w-8 bg-border" />}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <DialogFooter>
                 <Button variant="outline"><FileDown className="h-4 w-4 mr-2" /> PDF</Button>
                 <Button variant="outline"><Mail className="h-4 w-4 mr-2" /> Per E-Mail senden</Button>
-                <Button><CheckCircle className="h-4 w-4 mr-2" /> Als bezahlt markieren</Button>
+                <Button onClick={() => { handleMarkPaid(detailInvoice.id); setDetailInvoice(null); }}><CheckCircle className="h-4 w-4 mr-2" /> Als bezahlt markieren</Button>
+                <Button variant="destructive" onClick={() => handleDeleteInvoice(detailInvoice.id)}><Trash2 className="h-4 w-4 mr-2" /> Löschen</Button>
               </DialogFooter>
             </>
           )}
@@ -263,21 +301,23 @@ export default function Finance() {
         <DialogContent>
           <DialogHeader><DialogTitle>Neuer Buchungseintrag</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div><label className="text-sm font-medium">Datum</label><Input type="date" /></div>
+            <div><label className="text-sm font-medium">Datum</label><Input type="date" value={entryForm.date} onChange={e => setEntryForm(f => ({ ...f, date: e.target.value }))} /></div>
             <div><label className="text-sm font-medium">Typ</label>
-              <Select><SelectTrigger><SelectValue placeholder="Auswählen" /></SelectTrigger>
+              <Select value={entryForm.type} onValueChange={v => setEntryForm(f => ({ ...f, type: v }))}>
+                <SelectTrigger><SelectValue placeholder="Auswählen" /></SelectTrigger>
                 <SelectContent><SelectItem value="Einnahme">Einnahme</SelectItem><SelectItem value="Ausgabe">Ausgabe</SelectItem></SelectContent>
               </Select>
             </div>
             <div><label className="text-sm font-medium">Kategorie</label>
-              <Select><SelectTrigger><SelectValue placeholder="Kategorie" /></SelectTrigger>
+              <Select value={entryForm.category} onValueChange={v => setEntryForm(f => ({ ...f, category: v }))}>
+                <SelectTrigger><SelectValue placeholder="Kategorie" /></SelectTrigger>
                 <SelectContent>{accountingCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div><label className="text-sm font-medium">Beschreibung</label><Input placeholder="Beschreibung..." /></div>
-            <div><label className="text-sm font-medium">Betrag (€)</label><Input type="number" step="0.01" placeholder="0,00" /></div>
+            <div><label className="text-sm font-medium">Beschreibung</label><Input placeholder="Beschreibung..." value={entryForm.description} onChange={e => setEntryForm(f => ({ ...f, description: e.target.value }))} /></div>
+            <div><label className="text-sm font-medium">Betrag (€)</label><Input type="number" step="0.01" placeholder="0,00" value={entryForm.amount} onChange={e => setEntryForm(f => ({ ...f, amount: e.target.value }))} /></div>
           </div>
-          <DialogFooter><Button variant="ghost" onClick={() => setNewEntryOpen(false)}>Abbrechen</Button><Button>Speichern</Button></DialogFooter>
+          <DialogFooter><Button variant="ghost" onClick={() => setNewEntryOpen(false)}>Abbrechen</Button><Button onClick={handleCreateEntry} disabled={createEntry.isPending}>Speichern</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

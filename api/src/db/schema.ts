@@ -291,9 +291,11 @@ export const invoices = sqliteTable('invoices', {
   stripePaymentId: text('stripe_payment_id'),
   pdfUrl: text('pdf_url'),
   notes: text('notes'),
+  contractId: text('contract_id'),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
 }, (table) => ([
   uniqueIndex('idx_inv_org_number').on(table.orgId, table.invoiceNumber),
+  index('idx_inv_contract').on(table.contractId),
 ]));
 
 export const invoiceItems = sqliteTable('invoice_items', {
@@ -425,3 +427,227 @@ export const chatMessages = sqliteTable('chat_messages', {
   content: text('content').notNull(),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
 });
+
+// ─── Groups (Vertragsgruppen) ───────────────────────────────────────────────
+export const groups = sqliteTable('groups', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  orgId: text('org_id').notNull().references(() => organizations.id),
+  name: text('name').notNull(),
+  description: text('description'),
+  category: text('category').default('standard'),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+}, (table) => ([
+  uniqueIndex('idx_groups_org_name').on(table.orgId, table.name),
+]));
+
+// ─── Group Members (Mitglieder-Gruppen-Zuordnung) ──────────────────────────
+export const groupMembers = sqliteTable('group_members', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  groupId: text('group_id').notNull().references(() => groups.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  role: text('role').default('Mitglied'),
+  joinedAt: text('joined_at').default(sql`(datetime('now'))`),
+}, (table) => ([
+  uniqueIndex('idx_gm_unique').on(table.groupId, table.userId),
+  index('idx_gm_user').on(table.userId),
+]));
+
+// ─── Membership Types (Mitgliedsarten) ──────────────────────────────────────
+export const membershipTypes = sqliteTable('membership_types', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  orgId: text('org_id').notNull().references(() => organizations.id),
+  name: text('name').notNull(),
+  isActive: integer('is_active').default(1),
+  selfRegistrationEnabled: integer('self_registration_enabled').default(0),
+  shortDescription: text('short_description'),
+  description: text('description'),
+  bankAccountId: text('bank_account_id'),
+  invoiceCategory: text('invoice_category'),
+  vatPercent: real('vat_percent').default(0),
+  defaultInvoiceDay: integer('default_invoice_day').default(1),
+  activationFee: real('activation_fee').default(0),
+  contractType: text('contract_type').default('AUTO_RENEW'),
+  contractDurationMonths: integer('contract_duration_months'),
+  renewalDurationMonths: integer('renewal_duration_months'),
+  cancellationNoticeDays: integer('cancellation_notice_days').default(30),
+  cancellationNoticeBasis: text('cancellation_notice_basis').default('FROM_CANCELLATION'),
+  renewalCancellationDays: integer('renewal_cancellation_days'),
+  defaultGroupId: text('default_group_id').references(() => groups.id),
+  sortOrder: integer('sort_order').default(0),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+  updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+}, (table) => ([
+  uniqueIndex('idx_mt_org_name').on(table.orgId, table.name),
+]));
+
+// ─── Tarifs ─────────────────────────────────────────────────────────────────
+export const tarifs = sqliteTable('tarifs', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  orgId: text('org_id').notNull().references(() => organizations.id),
+  name: text('name').notNull(),
+  isActive: integer('is_active').default(1),
+  selfRegistrationEnabled: integer('self_registration_enabled').default(0),
+  shortDescription: text('short_description'),
+  description: text('description'),
+  bankAccountId: text('bank_account_id'),
+  invoiceCategory: text('invoice_category'),
+  vatPercent: real('vat_percent').default(0),
+  defaultInvoiceDay: integer('default_invoice_day').default(1),
+  activationFee: real('activation_fee').default(0),
+  contractType: text('contract_type').default('AUTO_RENEW'),
+  contractDurationMonths: integer('contract_duration_months'),
+  renewalDurationMonths: integer('renewal_duration_months'),
+  cancellationNoticeDays: integer('cancellation_notice_days').default(30),
+  cancellationNoticeBasis: text('cancellation_notice_basis').default('FROM_CANCELLATION'),
+  renewalCancellationDays: integer('renewal_cancellation_days'),
+  defaultGroupId: text('default_group_id').references(() => groups.id),
+  allowedMembershipTypeIds: text('allowed_membership_type_ids').default('[]'),
+  sortOrder: integer('sort_order').default(0),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+  updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+}, (table) => ([
+  uniqueIndex('idx_tarifs_org_name').on(table.orgId, table.name),
+]));
+
+// ─── Tarif Pricing (Preise pro Abrechnungszeitraum) ─────────────────────────
+export const tarifPricing = sqliteTable('tarif_pricing', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  orgId: text('org_id').notNull().references(() => organizations.id),
+  parentId: text('parent_id').notNull(),
+  parentType: text('parent_type').notNull(),
+  billingPeriod: text('billing_period').notNull(),
+  price: real('price').notNull(),
+  membershipTypeId: text('membership_type_id'),
+}, (table) => ([
+  uniqueIndex('idx_tp_unique').on(table.parentId, table.parentType, table.billingPeriod, table.membershipTypeId),
+]));
+
+// ─── Discount Groups (Rabattgruppen) ────────────────────────────────────────
+export const discountGroups = sqliteTable('discount_groups', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  orgId: text('org_id').notNull().references(() => organizations.id),
+  name: text('name').notNull(),
+  rules: text('rules').default('[]'),
+  groupId: text('group_id').references(() => groups.id),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+});
+
+// ─── Tarif Discounts ────────────────────────────────────────────────────────
+export const tarifDiscounts = sqliteTable('tarif_discounts', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  orgId: text('org_id').notNull().references(() => organizations.id),
+  parentId: text('parent_id').notNull(),
+  parentType: text('parent_type').notNull(),
+  billingPeriod: text('billing_period').notNull(),
+  discountGroupId: text('discount_group_id').notNull().references(() => discountGroups.id),
+  discountType: text('discount_type').notNull(),
+  discountValue: real('discount_value').notNull(),
+});
+
+// ─── Contracts (Verträge) ───────────────────────────────────────────────────
+export const contracts = sqliteTable('contracts', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  orgId: text('org_id').notNull().references(() => organizations.id),
+  contractNumber: text('contract_number').notNull(),
+  memberId: text('member_id').notNull().references(() => users.id),
+  groupId: text('group_id').references(() => groups.id),
+  contractKind: text('contract_kind').notNull(),
+  membershipTypeId: text('membership_type_id').references(() => membershipTypes.id),
+  tarifId: text('tarif_id').references(() => tarifs.id),
+  parentContractId: text('parent_contract_id'),
+  status: text('status').default('ACTIVE'),
+  startDate: text('start_date').notNull(),
+  endDate: text('end_date'),
+  billingPeriod: text('billing_period'),
+  currentPrice: real('current_price'),
+  discountGroupId: text('discount_group_id').references(() => discountGroups.id),
+  activationFeeCharged: integer('activation_fee_charged').default(0),
+  paidUntil: text('paid_until'),
+  autoRenew: integer('auto_renew').default(0),
+  renewalDurationMonths: integer('renewal_duration_months'),
+  cancellationNoticeDays: integer('cancellation_notice_days'),
+  cancellationNoticeBasis: text('cancellation_notice_basis'),
+  renewalCancellationDays: integer('renewal_cancellation_days'),
+  cancellationDate: text('cancellation_date'),
+  cancellationEffectiveDate: text('cancellation_effective_date'),
+  notes: text('notes'),
+  hasNotice: integer('has_notice').default(0),
+  createdBy: text('created_by').references(() => users.id),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+  updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+}, (table) => ([
+  uniqueIndex('idx_contracts_org_number').on(table.orgId, table.contractNumber),
+  index('idx_contracts_member').on(table.memberId),
+  index('idx_contracts_status').on(table.orgId, table.status),
+  index('idx_contracts_parent').on(table.parentContractId),
+]));
+
+// ─── Contract Pauses (Vertragspausen) ───────────────────────────────────────
+export const contractPauses = sqliteTable('contract_pauses', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  contractId: text('contract_id').notNull().references(() => contracts.id, { onDelete: 'cascade' }),
+  pauseFrom: text('pause_from').notNull(),
+  pauseUntil: text('pause_until').notNull(),
+  reason: text('reason'),
+  creditAmount: real('credit_amount').default(0),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+});
+
+// ─── Contract Applications (Selbstregistrierungs-Anträge) ───────────────────
+export const contractApplications = sqliteTable('contract_applications', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  orgId: text('org_id').notNull().references(() => organizations.id),
+  memberId: text('member_id').references(() => users.id),
+  membershipTypeId: text('membership_type_id').references(() => membershipTypes.id),
+  tarifId: text('tarif_id').references(() => tarifs.id),
+  billingPeriod: text('billing_period'),
+  firstName: text('first_name').notNull(),
+  lastName: text('last_name').notNull(),
+  email: text('email').notNull(),
+  phone: text('phone'),
+  address: text('address'),
+  dateOfBirth: text('date_of_birth'),
+  additionalData: text('additional_data').default('{}'),
+  status: text('status').default('PENDING'),
+  submittedAt: text('submitted_at').default(sql`(datetime('now'))`),
+  reviewedBy: text('reviewed_by').references(() => users.id),
+  reviewedAt: text('reviewed_at'),
+  reviewNotes: text('review_notes'),
+});
+
+// ─── Contract Settings (Org-weite Vertragseinstellungen) ────────────────────
+export const contractSettings = sqliteTable('contract_settings', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  orgId: text('org_id').notNull().references(() => organizations.id),
+  invoicePublishMode: text('invoice_publish_mode').default('DRAFT'),
+  defaultInvoiceGroupId: text('default_invoice_group_id').references(() => groups.id),
+  daysInAdvance: integer('days_in_advance').default(14),
+  priceUpdateTrigger: text('price_update_trigger').default('ON_RENEWAL'),
+  sepaRequired: integer('sepa_required').default(0),
+  memberCancellationAllowed: integer('member_cancellation_allowed').default(1),
+  selfRegistrationEnabled: integer('self_registration_enabled').default(0),
+  selfRegistrationAccess: text('self_registration_access').default('LINK_AND_FORM'),
+  welcomePageText: text('welcome_page_text'),
+  confirmationPageText: text('confirmation_page_text'),
+}, (table) => ([
+  uniqueIndex('idx_cs_org').on(table.orgId),
+]));
+
+// ─── Bank Accounts ──────────────────────────────────────────────────────────
+export const bankAccounts = sqliteTable('bank_accounts', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  orgId: text('org_id').notNull().references(() => organizations.id),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  accountHolder: text('account_holder').notNull(),
+  iban: text('iban').notNull(),
+  bic: text('bic'),
+  bankName: text('bank_name'),
+  sepaMandate: integer('sepa_mandate').default(0),
+  sepaMandateDate: text('sepa_mandate_date'),
+  sepaMandateRef: text('sepa_mandate_ref'),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+  updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+}, (table) => ([
+  uniqueIndex('idx_bank_user').on(table.userId),
+  index('idx_bank_org').on(table.orgId),
+]));

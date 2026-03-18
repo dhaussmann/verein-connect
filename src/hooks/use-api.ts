@@ -2,7 +2,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   membersApi, rolesApi, eventsApi, attendanceApi,
   communicationApi, financeApi, shopApi, filesApi, settingsApi, portalApi,
+  contractsApi, membershipTypesApi, tarifsApi, discountGroupsApi, groupsApi,
+  billingApi, contractSettingsApi, contractApplicationsApi, bankAccountApi,
   type Member, type PaginatedResponse, type Role, type Event,
+  type Contract, type ContractDetail, type MembershipType, type Tarif,
+  type DiscountGroup, type Group, type ContractApplication, type ContractSettings,
+  type BankAccount,
 } from '@/lib/api';
 
 // ─── Members ─────────────────────────────────────────────────────────────────
@@ -43,6 +48,33 @@ export function useDeleteMember() {
   return useMutation({
     mutationFn: (id: string) => membersApi.delete(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['members'] }); },
+  });
+}
+
+// ─── Bank Accounts ──────────────────────────────────────────────────────────
+
+export function useBankAccount(memberId: string | undefined) {
+  return useQuery({
+    queryKey: ['bank-account', memberId],
+    queryFn: () => bankAccountApi.get(memberId!),
+    enabled: !!memberId,
+  });
+}
+
+export function useUpsertBankAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ memberId, data }: { memberId: string; data: Parameters<typeof bankAccountApi.upsert>[1] }) =>
+      bankAccountApi.upsert(memberId, data),
+    onSuccess: (_d, vars) => { qc.invalidateQueries({ queryKey: ['bank-account', vars.memberId] }); },
+  });
+}
+
+export function useDeleteBankAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (memberId: string) => bankAccountApi.delete(memberId),
+    onSuccess: (_d, memberId) => { qc.invalidateQueries({ queryKey: ['bank-account', memberId] }); },
   });
 }
 
@@ -255,6 +287,14 @@ export function useMarkInvoicePaid() {
   });
 }
 
+export function useDeleteInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => financeApi.deleteInvoice(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['invoices'] }); },
+  });
+}
+
 export function useAccounting(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['accounting', params],
@@ -378,5 +418,298 @@ export function useMyDashboard() {
   return useQuery({
     queryKey: ['my-dashboard'],
     queryFn: () => portalApi.getMyDashboard(),
+  });
+}
+
+// ─── Contracts (Vertragsverwaltung) ──────────────────────────────────────────
+
+export function useContracts(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: ['contracts', params],
+    queryFn: () => contractsApi.list(params),
+  });
+}
+
+export function useContract(id: string | undefined) {
+  return useQuery({
+    queryKey: ['contracts', id],
+    queryFn: () => contractsApi.get(id!),
+    enabled: !!id,
+  });
+}
+
+export function useCreateContract() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, any>) => contractsApi.create(data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['contracts'] }); },
+  });
+}
+
+export function useDeleteContract() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => contractsApi.delete(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['contracts'] }); },
+  });
+}
+
+export function useUpdateContract() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, any> }) => contractsApi.update(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['contracts'] }); },
+  });
+}
+
+export function useCancelContract() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, cancellation_date }: { id: string; cancellation_date: string }) => contractsApi.cancel(id, { cancellation_date }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['contracts'] }); },
+  });
+}
+
+export function usePauseContract() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; pause_from: string; pause_until: string; reason?: string }) => contractsApi.pause(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['contracts'] }); },
+  });
+}
+
+export function useCreateContractInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => contractsApi.createInvoice(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['contracts'] }); },
+  });
+}
+
+export function useBulkInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => contractsApi.bulkInvoice(),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['contracts'] }); },
+  });
+}
+
+// ─── Membership Types ───────────────────────────────────────────────────────
+
+export function useMembershipTypes() {
+  return useQuery({
+    queryKey: ['membership-types'],
+    queryFn: () => membershipTypesApi.list(),
+  });
+}
+
+export function useCreateMembershipType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, any>) => membershipTypesApi.create(data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['membership-types'] }); },
+  });
+}
+
+export function useUpdateMembershipType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, any> }) => membershipTypesApi.update(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['membership-types'] }); },
+  });
+}
+
+export function useDeleteMembershipType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => membershipTypesApi.delete(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['membership-types'] }); },
+  });
+}
+
+// ─── Tarifs ─────────────────────────────────────────────────────────────────
+
+export function useTarifs() {
+  return useQuery({
+    queryKey: ['tarifs'],
+    queryFn: () => tarifsApi.list(),
+  });
+}
+
+export function useCreateTarif() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, any>) => tarifsApi.create(data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['tarifs'] }); },
+  });
+}
+
+export function useUpdateTarif() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, any> }) => tarifsApi.update(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['tarifs'] }); },
+  });
+}
+
+export function useDeleteTarif() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => tarifsApi.delete(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['tarifs'] }); },
+  });
+}
+
+// ─── Discount Groups ────────────────────────────────────────────────────────
+
+export function useDiscountGroups() {
+  return useQuery({
+    queryKey: ['discount-groups'],
+    queryFn: () => discountGroupsApi.list(),
+  });
+}
+
+export function useCreateDiscountGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, any>) => discountGroupsApi.create(data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['discount-groups'] }); },
+  });
+}
+
+export function useDeleteDiscountGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => discountGroupsApi.delete(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['discount-groups'] }); },
+  });
+}
+
+// ─── Groups ─────────────────────────────────────────────────────────────────
+
+export function useGroups() {
+  return useQuery({
+    queryKey: ['groups'],
+    queryFn: () => groupsApi.list(),
+  });
+}
+
+export function useGroupMembers(groupId?: string) {
+  return useQuery({
+    queryKey: ['group-members', groupId],
+    queryFn: () => groupsApi.getMembers(groupId!),
+    enabled: !!groupId,
+  });
+}
+
+export function useCreateGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string; description?: string; category?: string }) => groupsApi.create(data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['groups'] }); },
+  });
+}
+
+export function useUpdateGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { name: string; description?: string; category?: string } }) => groupsApi.update(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['groups'] }); },
+  });
+}
+
+export function useDeleteGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => groupsApi.delete(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['groups'] }); },
+  });
+}
+
+export function useAddGroupMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, userId, role }: { groupId: string; userId: string; role?: string }) =>
+      groupsApi.addMember(groupId, { user_id: userId, role }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['members'] });
+      qc.invalidateQueries({ queryKey: ['groups'] });
+      qc.invalidateQueries({ queryKey: ['group-members'] });
+    },
+  });
+}
+
+export function useRemoveGroupMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, userId }: { groupId: string; userId: string }) =>
+      groupsApi.removeMember(groupId, userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['members'] });
+      qc.invalidateQueries({ queryKey: ['groups'] });
+      qc.invalidateQueries({ queryKey: ['group-members'] });
+    },
+  });
+}
+
+// ─── Contract Applications ──────────────────────────────────────────────────
+
+export function useContractApplications(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: ['contract-applications', params],
+    queryFn: () => contractApplicationsApi.list(params),
+  });
+}
+
+export function useAcceptApplication() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => contractApplicationsApi.accept(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['contract-applications'] }); },
+  });
+}
+
+export function useRejectApplication() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, review_notes }: { id: string; review_notes?: string }) => contractApplicationsApi.reject(id, { review_notes }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['contract-applications'] }); },
+  });
+}
+
+// ─── Billing ────────────────────────────────────────────────────────────────
+
+export function useBillingSchedule() {
+  return useQuery({
+    queryKey: ['billing-schedule'],
+    queryFn: () => billingApi.getSchedule(),
+  });
+}
+
+export function useBillingRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => billingApi.run(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['billing-schedule'] });
+      qc.invalidateQueries({ queryKey: ['contracts'] });
+    },
+  });
+}
+
+// ─── Contract Settings ──────────────────────────────────────────────────────
+
+export function useContractSettings() {
+  return useQuery({
+    queryKey: ['contract-settings'],
+    queryFn: () => contractSettingsApi.get(),
+  });
+}
+
+export function useUpdateContractSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<ContractSettings>) => contractSettingsApi.update(data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['contract-settings'] }); },
   });
 }

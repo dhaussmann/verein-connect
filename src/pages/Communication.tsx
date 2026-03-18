@@ -12,10 +12,31 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Search, Plus, Send, Paperclip, Mail, Bell, MessageSquare, MoreHorizontal, Copy, Trash2, Users, Eye } from 'lucide-react';
-import { conversations, sentMessages, messageTemplates, placeholderTags, type Conversation } from '@/data/communicationData';
+import { useMessages, useMessageTemplates, useConversations } from '@/hooks/use-api';
+
+interface Conversation {
+  id: string;
+  name: string;
+  initials: string;
+  isGroup: boolean;
+  lastMessage: string;
+  lastTime: string;
+  unread: number;
+  messages: { id: string; senderId: string; senderName: string; senderInitials: string; text: string; timestamp: string; isOwn: boolean }[];
+}
+
+const placeholderTags = ['{{vorname}}', '{{nachname}}', '{{verein}}', '{{kurs}}', '{{datum}}', '{{uhrzeit}}', '{{betrag}}'];
 
 export default function Communication() {
-  const [activeConv, setActiveConv] = useState<Conversation>(conversations[0]);
+  const { data: conversationsData } = useConversations();
+  const { data: messagesData } = useMessages();
+  const { data: templatesData } = useMessageTemplates();
+
+  const conversations: Conversation[] = Array.isArray(conversationsData) ? conversationsData as any : [];
+  const sentMessages: any[] = Array.isArray(messagesData) ? messagesData : (messagesData as any)?.data ?? [];
+  const messageTemplates: any[] = Array.isArray(templatesData) ? templatesData : (templatesData as any)?.data ?? [];
+
+  const [activeConv, setActiveConv] = useState<Conversation | null>(null);
   const [chatSearch, setChatSearch] = useState('');
   const [msgInput, setMsgInput] = useState('');
   const [channelFilter, setChannelFilter] = useState('all');
@@ -25,9 +46,11 @@ export default function Communication() {
   const [emailBody, setEmailBody] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [activeConv]);
+  const currentConv = activeConv ?? conversations[0] ?? null;
 
-  const filteredMessages = sentMessages.filter(m =>
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [currentConv]);
+
+  const filteredMessages = sentMessages.filter((m: any) =>
     (channelFilter === 'all' || m.channel === channelFilter) &&
     (statusFilter === 'all' || m.status === statusFilter)
   );
@@ -136,7 +159,7 @@ export default function Communication() {
               <div className="flex-1 overflow-y-auto">
                 {conversations.filter(c => c.name.toLowerCase().includes(chatSearch.toLowerCase())).map(conv => (
                   <button key={conv.id} onClick={() => setActiveConv(conv)}
-                    className={`w-full p-3 flex items-start gap-3 text-left hover:bg-muted/50 transition-colors border-b border-border/50 ${activeConv.id === conv.id ? 'bg-accent' : ''}`}>
+                    className={`w-full p-3 flex items-start gap-3 text-left hover:bg-muted/50 transition-colors border-b border-border/50 ${currentConv?.id === conv.id ? 'bg-accent' : ''}`}>
                     <Avatar className="h-10 w-10 shrink-0">
                       <AvatarFallback className={conv.isGroup ? 'bg-primary text-primary-foreground text-xs' : 'bg-primary-lightest text-primary text-xs'}>{conv.initials}</AvatarFallback>
                     </Avatar>
@@ -162,17 +185,17 @@ export default function Communication() {
             <div className="flex-1 flex flex-col">
               <div className="p-3 border-b border-border flex items-center gap-3">
                 <Avatar className="h-8 w-8">
-                  <AvatarFallback className={activeConv.isGroup ? 'bg-primary text-primary-foreground text-xs' : 'bg-primary-lightest text-primary text-xs'}>{activeConv.initials}</AvatarFallback>
+                  <AvatarFallback className={currentConv?.isGroup ? 'bg-primary text-primary-foreground text-xs' : 'bg-primary-lightest text-primary text-xs'}>{currentConv?.initials ?? '?'}</AvatarFallback>
                 </Avatar>
                 <div>
-                  <div className="font-medium text-sm">{activeConv.name}</div>
-                  <div className="text-xs text-muted-foreground">{activeConv.isGroup ? 'Gruppe' : 'Online'}</div>
+                  <div className="font-medium text-sm">{currentConv?.name ?? '–'}</div>
+                  <div className="text-xs text-muted-foreground">{currentConv?.isGroup ? 'Gruppe' : 'Online'}</div>
                 </div>
-                {activeConv.isGroup && <Badge variant="outline" className="ml-auto"><Users className="h-3 w-3 mr-1" /> Gruppe</Badge>}
+                {currentConv?.isGroup && <Badge variant="outline" className="ml-auto"><Users className="h-3 w-3 mr-1" /> Gruppe</Badge>}
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {activeConv.messages.map(msg => (
+                {(currentConv?.messages ?? []).map(msg => (
                   <div key={msg.id} className={`flex ${msg.isOwn ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[70%] ${msg.isOwn ? 'order-1' : 'order-2'}`}>
                       {!msg.isOwn && <span className="text-xs font-medium text-primary mb-1 block">{msg.senderName}</span>}

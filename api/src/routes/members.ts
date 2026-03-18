@@ -4,7 +4,7 @@ import { eq, and, like, or, sql, desc, asc, count } from 'drizzle-orm';
 import { z } from 'zod';
 import { hash } from 'bcryptjs';
 import type { Env, AuthUser } from '../types/bindings';
-import { users, roles, userRoles, profileFieldDefinitions, profileFieldValues, families, familyMembers } from '../db/schema';
+import { users, roles, userRoles, profileFieldDefinitions, profileFieldValues, families, familyMembers, groups, groupMembers } from '../db/schema';
 import { parsePagination, buildMeta } from '../lib/pagination';
 import { NotFoundError, ValidationError } from '../lib/errors';
 import { writeAuditLog } from '../lib/audit';
@@ -55,6 +55,18 @@ async function enrichMember(db: ReturnType<typeof drizzle>, member: any, orgId: 
     customFields[f.fieldName] = f.value || '';
   }
 
+  // Groups
+  const memberGroups = await db
+    .select({
+      groupId: groups.id,
+      groupName: groups.name,
+      category: groups.category,
+      memberRole: groupMembers.role,
+    })
+    .from(groupMembers)
+    .innerJoin(groups, eq(groupMembers.groupId, groups.id))
+    .where(eq(groupMembers.userId, member.id));
+
   // Family
   const familyRow = await db
     .select({
@@ -86,7 +98,7 @@ async function enrichMember(db: ReturnType<typeof drizzle>, member: any, orgId: 
     city: member.city || '',
     status: statusMap[member.status || 'active'] || 'Aktiv',
     roles: memberRoles.map((r) => r.name),
-    groups: memberRoles.filter((r) => r.category === 'team' || r.category === 'department').map((r) => r.name),
+    groups: memberGroups.map((g) => ({ id: g.groupId, name: g.groupName, category: g.category, role: g.memberRole })),
     joinDate: member.createdAt ? new Date(member.createdAt).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '',
     avatarInitials: initials,
     avatarUrl: member.avatarUrl,
@@ -192,6 +204,13 @@ memberRoutes.post('/', async (c) => {
   const data = parsed.data;
   const db = drizzle(c.env.DB);
 
+  // Check for duplicate email
+  const existingUser = await db.select({ id: users.id }).from(users)
+    .where(and(eq(users.orgId, user.orgId), eq(users.email, data.email)));
+  if (existingUser.length > 0) {
+    throw new ValidationError('Ein Mitglied mit dieser E-Mail-Adresse existiert bereits', { email: ['E-Mail bereits vergeben'] });
+  }
+
   // Generate member number
   const countResult = await db.select({ count: count() }).from(users).where(eq(users.orgId, user.orgId));
   const num = (countResult[0]?.count || 0) + 1;
@@ -200,24 +219,32 @@ memberRoutes.post('/', async (c) => {
   const memberId = crypto.randomUUID();
   const passwordHash = data.password ? await hash(data.password, 12) : null;
 
-  await db.insert(users).values({
-    id: memberId,
-    orgId: user.orgId,
-    email: data.email,
-    passwordHash,
-    firstName: data.first_name,
-    lastName: data.last_name,
-    displayName: `${data.first_name} ${data.last_name}`,
-    phone: data.phone,
-    mobile: data.mobile,
-    birthDate: data.birth_date,
-    gender: data.gender,
-    street: data.street,
-    zip: data.zip,
-    city: data.city,
-    status: data.status || 'active',
-    memberNumber,
-  });
+  try {
+    await db.insert(users).values({
+      id: memberId,
+      orgId: user.orgId,
+      email: data.email,
+      passwordHash,
+      firstName: data.first_name,
+      lastName: data.last_name,
+      displayName: `${data.first_name} ${data.last_name}`,
+      phone: data.phone || null,
+      mobile: data.mobile || null,
+      birthDate: data.birth_date || null,
+      gender: data.gender || null,
+      street: data.street || null,
+      zip: data.zip || null,
+      city: data.city || null,
+      status: data.status || 'active',
+      memberNumber,
+    });
+  } catch (dbErr: any) {
+    console.error('[MEMBER_CREATE] DB insert error:', dbErr.message, dbErr);
+    if (dbErr.message?.includes('UNIQUE')) {
+      throw new ValidationError('Ein Mitglied mit dieser E-Mail-Adresse existiert bereits', { email: ['E-Mail bereits vergeben'] });
+    }
+    throw dbErr;
+  }
 
   // Assign roles
   if (data.role_ids?.length) {

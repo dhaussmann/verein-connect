@@ -9,7 +9,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Folder, FolderOpen, FileText, FileSpreadsheet, Image, Film, Upload, Plus, MoreHorizontal, Download, Pencil, Trash2, Shield, LayoutGrid, List, ChevronRight } from 'lucide-react';
-import { folders, files, type FileFolder } from '@/data/filesData';
+import { useFiles } from '@/hooks/use-api';
+
+interface FileItem {
+  id: string;
+  name: string;
+  folderId?: string;
+  folder?: string;
+  type: string;
+  size: string;
+  uploadedBy: string;
+  uploadDate: string;
+  accessRoles?: string[];
+}
 
 const fileIcon = (type: string) => {
   const map: Record<string, JSX.Element> = {
@@ -28,20 +40,17 @@ export default function Files() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [permModalOpen, setPermModalOpen] = useState(false);
 
+  const { data: filesData, isLoading } = useFiles(selectedFolder ? { folder: selectedFolder } : undefined);
+  const files: FileItem[] = Array.isArray(filesData) ? filesData as any : (filesData as any)?.data ?? [];
+
+  // Derive folders from files
+  const folderNames = [...new Set(files.map(f => f.folder || f.folderId || '').filter(Boolean))];
+
   const visibleFiles = selectedFolder
-    ? files.filter(f => f.folderId === selectedFolder)
+    ? files.filter(f => (f.folder || f.folderId) === selectedFolder)
     : files;
 
-  const allFolderIds = [...folders.map(f => f.id), ...folders.flatMap(f => f.children?.map(c => c.id) || [])];
-  const selectedFolderName = (() => {
-    for (const f of folders) {
-      if (f.id === selectedFolder) return f.name;
-      for (const c of f.children || []) {
-        if (c.id === selectedFolder) return `${f.name} / ${c.name}`;
-      }
-    }
-    return 'Alle Dateien';
-  })();
+  const selectedFolderName = selectedFolder ?? 'Alle Dateien';
 
   return (
     <div>
@@ -61,20 +70,13 @@ export default function Files() {
                 className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium mb-1 ${!selectedFolder ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'}`}>
                 Alle Dateien
               </button>
-              {folders.map(folder => (
-                <div key={folder.id}>
-                  <button onClick={() => setSelectedFolder(folder.id)}
-                    className={`w-full text-left px-3 py-2 rounded-md text-sm flex items-center gap-2 ${selectedFolder === folder.id ? 'bg-accent text-accent-foreground font-medium' : 'hover:bg-muted'}`}>
-                    {selectedFolder === folder.id ? <FolderOpen className="h-4 w-4" /> : <Folder className="h-4 w-4" />}
-                    {folder.name}
+              {folderNames.map(folder => (
+                <div key={folder}>
+                  <button onClick={() => setSelectedFolder(folder)}
+                    className={`w-full text-left px-3 py-2 rounded-md text-sm flex items-center gap-2 ${selectedFolder === folder ? 'bg-accent text-accent-foreground font-medium' : 'hover:bg-muted'}`}>
+                    {selectedFolder === folder ? <FolderOpen className="h-4 w-4" /> : <Folder className="h-4 w-4" />}
+                    {folder}
                   </button>
-                  {folder.children?.map(child => (
-                    <button key={child.id} onClick={() => setSelectedFolder(child.id)}
-                      className={`w-full text-left pl-8 pr-3 py-1.5 rounded-md text-sm flex items-center gap-2 ${selectedFolder === child.id ? 'bg-accent text-accent-foreground font-medium' : 'hover:bg-muted text-muted-foreground'}`}>
-                      <ChevronRight className="h-3 w-3" />
-                      {child.name}
-                    </button>
-                  ))}
                 </div>
               ))}
             </CardContent>

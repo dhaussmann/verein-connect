@@ -168,7 +168,7 @@ export interface Member {
   city: string;
   status: 'Aktiv' | 'Inaktiv' | 'Ausstehend';
   roles: string[];
-  groups: string[];
+  groups: { id: string; name: string; category: string | null; role: string | null }[];
   joinDate: string;
   avatarInitials: string;
   customFields: Record<string, string>;
@@ -230,12 +230,52 @@ export const membersApi = {
     }),
 
   delete: (id: string) =>
-    request<void>(`/v1/members/${id}`, { method: 'DELETE' }),
+    request<void>(`/v1/members/${id}?hard=true`, { method: 'DELETE' }),
 
   bulkAction: (action: string, memberIds: string[]) =>
     request<{ affected: number }>('/v1/members/bulk', {
       method: 'POST',
       body: JSON.stringify({ action, member_ids: memberIds }),
+    }),
+};
+
+// ─── Bank Accounts ──────────────────────────────────────────────────────────
+
+export interface BankAccount {
+  id: string;
+  userId: string;
+  accountHolder: string;
+  iban: string;
+  bic: string | null;
+  bankName: string | null;
+  sepaMandate: boolean;
+  sepaMandateDate: string | null;
+  sepaMandateRef: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const bankAccountApi = {
+  get: (memberId: string) =>
+    request<BankAccount | null>(`/v1/members/${memberId}/bank-account`),
+
+  upsert: (memberId: string, data: {
+    account_holder: string;
+    iban: string;
+    bic?: string | null;
+    bank_name?: string | null;
+    sepa_mandate?: boolean;
+    sepa_mandate_date?: string | null;
+    sepa_mandate_ref?: string | null;
+  }) =>
+    request<{ id: string }>(`/v1/members/${memberId}/bank-account`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  delete: (memberId: string) =>
+    request<{ success: boolean }>(`/v1/members/${memberId}/bank-account`, {
+      method: 'DELETE',
     }),
 };
 
@@ -475,6 +515,9 @@ export const financeApi = {
   markPaid: (id: string) =>
     request<unknown>(`/v1/invoices/${id}/paid`, { method: 'POST' }),
 
+  deleteInvoice: (id: string) =>
+    request<unknown>(`/v1/invoices/${id}`, { method: 'DELETE' }),
+
   listAccounting: (params?: Record<string, string>) => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
     return request<{ entries: AccountingEntry[]; summary?: unknown }>(`/v1/accounting${qs}`);
@@ -617,6 +660,287 @@ export interface MyDashboard {
   roles: string[];
   upcomingEvents: { id: string; title: string; startDate: string; timeStart: string; timeEnd: string; location: string }[];
 }
+
+// ─── Contracts (Vertragsverwaltung) ──────────────────────────────────────────
+
+export interface Contract {
+  id: string;
+  contractNumber: string;
+  memberId: string;
+  memberName: string;
+  memberEmail: string;
+  memberInitials: string;
+  contractKind: string;
+  typeName: string;
+  groupId: string | null;
+  groupName: string;
+  status: string;
+  startDate: string;
+  endDate: string | null;
+  currentPrice: number | null;
+  billingPeriod: string | null;
+  autoRenew: number | null;
+  cancellationDate: string | null;
+  cancellationEffectiveDate: string | null;
+  createdAt: string;
+}
+
+export interface ContractDetail extends Contract {
+  membershipTypeId: string | null;
+  tarifId: string | null;
+  parentContractId: string | null;
+  discountGroupId: string | null;
+  activationFeeCharged: number | null;
+  paidUntil: string | null;
+  renewalDurationMonths: number | null;
+  cancellationNoticeDays: number | null;
+  cancellationNoticeBasis: string | null;
+  renewalCancellationDays: number | null;
+  notes: string | null;
+  hasNotice: number | null;
+  createdBy: string | null;
+  createdByName: string;
+  updatedAt: string;
+  member: {
+    id: string; firstName: string; lastName: string; email: string;
+    phone: string | null; mobile: string | null;
+    street: string | null; zip: string | null; city: string | null;
+  } | null;
+  pauses: ContractPause[];
+  invoices: any[];
+  children: any[];
+}
+
+export interface ContractPause {
+  id: string;
+  contractId: string;
+  pauseFrom: string;
+  pauseUntil: string;
+  reason: string | null;
+  creditAmount: number | null;
+  createdAt: string;
+}
+
+export interface MembershipType {
+  id: string;
+  orgId: string;
+  name: string;
+  isActive: number;
+  selfRegistrationEnabled: number;
+  shortDescription: string | null;
+  description: string | null;
+  bankAccountId: string | null;
+  invoiceCategory: string | null;
+  vatPercent: number;
+  defaultInvoiceDay: number;
+  activationFee: number;
+  contractType: string;
+  contractDurationMonths: number | null;
+  renewalDurationMonths: number | null;
+  cancellationNoticeDays: number;
+  cancellationNoticeBasis: string;
+  renewalCancellationDays: number | null;
+  defaultGroupId: string | null;
+  groupName: string;
+  sortOrder: number;
+  pricing: TarifPricing[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Tarif extends MembershipType {
+  allowedMembershipTypeIds: string[];
+}
+
+export interface TarifPricing {
+  id: string;
+  parentId: string;
+  parentType: string;
+  billingPeriod: string;
+  price: number;
+  membershipTypeId: string | null;
+}
+
+export interface DiscountGroup {
+  id: string;
+  orgId: string;
+  name: string;
+  rules: { field: string; operator: string; value: string }[];
+  groupId: string | null;
+  groupName: string;
+  createdAt: string;
+}
+
+export interface Group {
+  id: string;
+  orgId: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  createdAt: string;
+}
+
+export interface GroupMember {
+  id: string;
+  userId: string;
+  role: string | null;
+  joinedAt: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
+export interface ContractApplication {
+  id: string;
+  orgId: string;
+  memberId: string | null;
+  membershipTypeId: string | null;
+  tarifId: string | null;
+  billingPeriod: string | null;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string | null;
+  address: string | null;
+  dateOfBirth: string | null;
+  additionalData: Record<string, any>;
+  status: string;
+  typeName: string;
+  reviewerName: string;
+  submittedAt: string;
+  reviewedAt: string | null;
+  reviewNotes: string | null;
+}
+
+export interface ContractSettings {
+  invoicePublishMode: string;
+  defaultInvoiceGroupId: string | null;
+  daysInAdvance: number;
+  priceUpdateTrigger: string;
+  sepaRequired: number;
+  memberCancellationAllowed: number;
+  selfRegistrationEnabled: number;
+  selfRegistrationAccess: string;
+  welcomePageText: string | null;
+  confirmationPageText: string | null;
+}
+
+export const contractsApi = {
+  list: (params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return request<PaginatedResponse<Contract>>(`/v1/contracts${qs}`);
+  },
+  get: (id: string) => request<ContractDetail>(`/v1/contracts/${id}`),
+  create: (data: Record<string, any>) =>
+    request<any>('/v1/contracts', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: Record<string, any>) =>
+    request<any>(`/v1/contracts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  delete: (id: string) =>
+    request<void>(`/v1/contracts/${id}`, { method: 'DELETE' }),
+  cancel: (id: string, data: { cancellation_date: string }) =>
+    request<any>(`/v1/contracts/${id}/cancel`, { method: 'POST', body: JSON.stringify(data) }),
+  pause: (id: string, data: { pause_from: string; pause_until: string; reason?: string }) =>
+    request<any>(`/v1/contracts/${id}/pause`, { method: 'POST', body: JSON.stringify(data) }),
+  removePause: (id: string, pauseId: string) =>
+    request<any>(`/v1/contracts/${id}/pause/${pauseId}`, { method: 'DELETE' }),
+  markPaid: (id: string, data: { paid_until: string }) =>
+    request<any>(`/v1/contracts/${id}/mark-paid`, { method: 'POST', body: JSON.stringify(data) }),
+  createInvoice: (id: string) =>
+    request<any>(`/v1/contracts/${id}/invoice`, { method: 'POST' }),
+  bulkInvoice: () =>
+    request<{ created: number }>('/v1/contracts/bulk-invoice', { method: 'POST' }),
+};
+
+export const membershipTypesApi = {
+  list: () => request<{ data: MembershipType[] }>('/v1/membership-types'),
+  create: (data: Record<string, any>) =>
+    request<MembershipType>('/v1/membership-types', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: Record<string, any>) =>
+    request<any>(`/v1/membership-types/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  delete: (id: string) =>
+    request<any>(`/v1/membership-types/${id}`, { method: 'DELETE' }),
+  setPricing: (id: string, pricing: any[]) =>
+    request<any>(`/v1/membership-types/${id}/pricing`, { method: 'POST', body: JSON.stringify({ pricing }) }),
+  setDiscounts: (id: string, discounts: any[]) =>
+    request<any>(`/v1/membership-types/${id}/discounts`, { method: 'POST', body: JSON.stringify({ discounts }) }),
+};
+
+export const tarifsApi = {
+  list: () => request<{ data: Tarif[] }>('/v1/tarifs'),
+  create: (data: Record<string, any>) =>
+    request<Tarif>('/v1/tarifs', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: Record<string, any>) =>
+    request<any>(`/v1/tarifs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  delete: (id: string) =>
+    request<any>(`/v1/tarifs/${id}`, { method: 'DELETE' }),
+  setPricing: (id: string, pricing: any[]) =>
+    request<any>(`/v1/tarifs/${id}/pricing`, { method: 'POST', body: JSON.stringify({ pricing }) }),
+  setDiscounts: (id: string, discounts: any[]) =>
+    request<any>(`/v1/tarifs/${id}/discounts`, { method: 'POST', body: JSON.stringify({ discounts }) }),
+};
+
+export const discountGroupsApi = {
+  list: () => request<{ data: DiscountGroup[] }>('/v1/discount-groups'),
+  create: (data: Record<string, any>) =>
+    request<DiscountGroup>('/v1/discount-groups', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: Record<string, any>) =>
+    request<any>(`/v1/discount-groups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  delete: (id: string) =>
+    request<any>(`/v1/discount-groups/${id}`, { method: 'DELETE' }),
+};
+
+export const groupsApi = {
+  list: () => request<{ data: Group[] }>('/v1/groups'),
+  create: (data: { name: string; description?: string; category?: string }) =>
+    request<Group>('/v1/groups', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: { name: string; description?: string; category?: string }) =>
+    request<any>(`/v1/groups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  delete: (id: string) =>
+    request<any>(`/v1/groups/${id}`, { method: 'DELETE' }),
+  getMembers: (id: string) =>
+    request<{ data: GroupMember[] }>(`/v1/groups/${id}/members`),
+  addMember: (id: string, data: { user_id: string; role?: string }) =>
+    request<any>(`/v1/groups/${id}/members`, { method: 'POST', body: JSON.stringify(data) }),
+  removeMember: (id: string, userId: string) =>
+    request<any>(`/v1/groups/${id}/members/${userId}`, { method: 'DELETE' }),
+};
+
+export const billingApi = {
+  getSchedule: () => request<any>('/v1/billing/schedule'),
+  run: () => request<{ created: number; errors: string[] }>('/v1/billing/run', { method: 'POST' }),
+};
+
+export const contractSettingsApi = {
+  get: () => request<ContractSettings>('/v1/contract-settings'),
+  update: (data: Partial<ContractSettings>) =>
+    request<any>('/v1/contract-settings', { method: 'PUT', body: JSON.stringify(data) }),
+};
+
+export const contractApplicationsApi = {
+  list: (params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return request<PaginatedResponse<ContractApplication>>(`/v1/contract-applications${qs}`);
+  },
+  accept: (id: string) =>
+    request<any>(`/v1/contract-applications/${id}/accept`, { method: 'PUT' }),
+  reject: (id: string, data?: { review_notes?: string }) =>
+    request<any>(`/v1/contract-applications/${id}/reject`, { method: 'PUT', body: JSON.stringify(data || {}) }),
+};
+
+export const selfRegistrationApi = {
+  getOptions: (orgSlug: string) => {
+    const base = import.meta.env.VITE_API_URL || 'https://verein-connect-api.cloudflareone-demo-account.workers.dev';
+    return fetch(`${base}/public/self-registration/options?org=${orgSlug}`).then(r => r.json());
+  },
+  apply: (data: Record<string, any>) => {
+    const base = import.meta.env.VITE_API_URL || 'https://verein-connect-api.cloudflareone-demo-account.workers.dev';
+    return fetch(`${base}/public/self-registration/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).then(r => r.json());
+  },
+};
 
 export const portalApi = {
   getProfile: () => request<MyProfile>('/v1/me/profile'),

@@ -5,18 +5,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
-import { Clock, MapPin, Trophy } from 'lucide-react';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { todayEvents, topAttendees, courseAttendanceRates } from '@/data/attendanceData';
-
-const COLORS = ['hsl(207,62%,28%)', 'hsl(207,62%,47%)', 'hsl(207,73%,91%)'];
+import { Clock, MapPin } from 'lucide-react';
+import { useEvents } from '@/hooks/use-api';
 
 export default function Attendance() {
   const [dateFilter, setDateFilter] = useState('today');
   const navigate = useNavigate();
-  const overallRate = 82;
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const { data: eventsData, isLoading } = useEvents({ date: todayStr, per_page: '50' });
+  const todayEvents = eventsData?.data ?? [];
 
   return (
     <div>
@@ -35,10 +34,18 @@ export default function Attendance() {
         </div>
       </PageHeader>
 
+      {isLoading && (
+        <div className="text-center py-12 text-muted-foreground">Termine werden geladen...</div>
+      )}
+
+      {!isLoading && todayEvents.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground">Heute keine Termine vorhanden.</div>
+      )}
+
       {/* Today's Events Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        {todayEvents.map((event) => {
-          const pct = event.totalParticipants > 0 ? (event.checkedIn / event.totalParticipants) * 100 : 0;
+        {todayEvents.map((event: any) => {
+          const pct = event.maxParticipants > 0 ? (event.participants / event.maxParticipants) * 100 : 0;
           return (
             <Card key={event.id} className="border border-border">
               <CardContent className="p-4 space-y-3">
@@ -46,21 +53,20 @@ export default function Attendance() {
                   <div>
                     <h3 className="font-semibold text-foreground">{event.title}</h3>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                      <Clock className="h-3.5 w-3.5" /> {event.time}
+                      <Clock className="h-3.5 w-3.5" /> {event.timeStart}–{event.timeEnd}
                     </div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <MapPin className="h-3.5 w-3.5" /> {event.location}
                     </div>
                   </div>
-                  <Badge variant={event.isActive ? 'default' : 'secondary'}
-                    className={event.isActive ? 'bg-success text-success-foreground' : ''}>
-                    {event.isActive ? 'Aktiv' : 'Ausstehend'}
+                  <Badge variant="secondary">
+                    {event.status}
                   </Badge>
                 </div>
                 <div>
                   <div className="flex justify-between text-sm mb-1">
-                    <span className="text-muted-foreground">Anwesend</span>
-                    <span className="font-medium">{event.checkedIn}/{event.totalParticipants}</span>
+                    <span className="text-muted-foreground">Teilnehmer</span>
+                    <span className="font-medium">{event.participants}/{event.maxParticipants}</span>
                   </div>
                   <Progress value={pct} className="h-2" />
                 </div>
@@ -73,60 +79,13 @@ export default function Attendance() {
         })}
       </div>
 
-      {/* Statistics */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Donut Chart */}
-        <Card className="border border-border">
-          <CardHeader><CardTitle className="text-base">Durchschn. Anwesenheitsquote</CardTitle></CardHeader>
-          <CardContent className="flex justify-center">
-            <div className="relative">
-              <ResponsiveContainer width={180} height={180}>
-                <PieChart>
-                  <Pie data={[{ value: overallRate }, { value: 100 - overallRate }]} cx="50%" cy="50%" innerRadius={60} outerRadius={80} startAngle={90} endAngle={-270} dataKey="value">
-                    <Cell fill="hsl(207,62%,28%)" />
-                    <Cell fill="hsl(210,10%,85%)" />
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-3xl font-bold text-foreground">{overallRate}%</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Top Attendees */}
-        <Card className="border border-border">
-          <CardHeader><CardTitle className="text-base flex items-center gap-2"><Trophy className="h-4 w-4 text-warning" /> Top 5 Anwesenheit</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            {topAttendees.map((a, i) => (
-              <div key={a.memberId} className="flex items-center gap-3">
-                <span className="text-sm font-bold text-muted-foreground w-5">{i + 1}.</span>
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-primary-lightest text-primary text-xs">{a.initials}</AvatarFallback>
-                </Avatar>
-                <span className="flex-1 text-sm font-medium">{a.name}</span>
-                <span className="text-sm font-semibold text-success">{a.rate}%</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        {/* Bar Chart */}
-        <Card className="border border-border">
-          <CardHeader><CardTitle className="text-base">Anwesenheit nach Kurs</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={courseAttendanceRates} layout="vertical" margin={{ left: 10 }}>
-                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 12 }} />
-                <YAxis type="category" dataKey="course" tick={{ fontSize: 11 }} width={100} />
-                <Tooltip formatter={(v: number) => `${v}%`} />
-                <Bar dataKey="rate" fill="hsl(207,62%,28%)" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Statistics placeholder */}
+      <Card className="border border-border">
+        <CardHeader><CardTitle className="text-base">Statistiken</CardTitle></CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground text-sm py-8 text-center">Anwesenheitsstatistiken werden bei ausreichend erfassten Daten angezeigt.</p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

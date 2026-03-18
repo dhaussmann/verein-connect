@@ -195,8 +195,12 @@ financeRoutes.delete('/invoices/:id', async (c) => {
   const db = drizzle(c.env.DB);
   const invId = c.req.param('id');
 
-  await db.update(invoices).set({ status: 'cancelled' }).where(and(eq(invoices.id, invId), eq(invoices.orgId, user.orgId)));
-  await writeAuditLog(c.env.DB, user.orgId, user.id, 'Rechnung storniert', 'invoice', invId);
+  // Clear FK references, delete line items, then delete the invoice
+  await db.update(accountingEntries).set({ invoiceId: null }).where(eq(accountingEntries.invoiceId, invId));
+  await db.run(sql`UPDATE shop_orders SET invoice_id = NULL WHERE invoice_id = ${invId}`);
+  await db.delete(invoiceItems).where(eq(invoiceItems.invoiceId, invId));
+  await db.delete(invoices).where(and(eq(invoices.id, invId), eq(invoices.orgId, user.orgId)));
+  await writeAuditLog(c.env.DB, user.orgId, user.id, 'Rechnung gelöscht', 'invoice', invId);
   return c.json({ success: true });
 });
 

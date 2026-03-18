@@ -11,10 +11,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, Package, Edit, ImageIcon } from 'lucide-react';
-import { products, orders, productCategories } from '@/data/shopData';
+import { useProducts, useOrders } from '@/hooks/use-api';
+
+const productCategories = ['Bekleidung', 'Accessoires', 'Medien', 'Sonstiges'];
 
 export default function Shop() {
   const [productModalOpen, setProductModalOpen] = useState(false);
+
+  const { data: productsData, isLoading: productsLoading } = useProducts();
+  const { data: ordersData, isLoading: ordersLoading } = useOrders();
+
+  const products: any[] = Array.isArray(productsData) ? productsData : (productsData as any)?.data ?? [];
+  const orders: any[] = Array.isArray(ordersData) ? ordersData : (ordersData as any)?.data ?? [];
 
   const statusColor = (s: string) => {
     const map: Record<string, string> = {

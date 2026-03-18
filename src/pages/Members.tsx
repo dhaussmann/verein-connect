@@ -20,8 +20,7 @@ import {
   Pencil, MessageSquare, UserMinus, Star, Save, ChevronLeft, ChevronRight,
   Users, Send, Receipt, FileSpreadsheet,
 } from 'lucide-react';
-import { availableRoles, availableGroups } from '@/data/mockData';
-import { useMembers } from '@/hooks/use-api';
+import { useMembers, useRoles, useGroups } from '@/hooks/use-api';
 import type { Member } from '@/lib/api';
 
 type SortKey = 'name' | 'email' | 'memberNumber' | 'status' | 'joinDate';
@@ -47,6 +46,10 @@ export default function Members() {
 
   const { data: membersData, isLoading, error } = useMembers({ per_page: '200' });
   const allMembers: Member[] = membersData?.data ?? [];
+  const { data: rolesData } = useRoles();
+  const { data: groupsData } = useGroups();
+  const roleNames = (rolesData || []).map((r) => r.name);
+  const groupNames = (groupsData?.data || []).map((g) => g.name);
 
   const filtered = useMemo(() => {
     let list = [...allMembers];
@@ -58,7 +61,7 @@ export default function Members() {
     );
     if (statusFilter !== 'Alle') list = list.filter((m) => m.status === statusFilter);
     if (roleFilter !== 'Alle') list = list.filter((m) => m.roles.includes(roleFilter));
-    if (groupFilter !== 'Alle') list = list.filter((m) => m.groups.includes(groupFilter));
+    if (groupFilter !== 'Alle') list = list.filter((m) => m.groups.some((g) => g.name === groupFilter));
 
     list.sort((a, b) => {
       let cmp = 0;
@@ -77,7 +80,7 @@ export default function Members() {
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return list;
-  }, [search, statusFilter, roleFilter, groupFilter, sortKey, sortDir]);
+  }, [allMembers, search, statusFilter, roleFilter, groupFilter, sortKey, sortDir]);
 
   const totalPages = Math.ceil(filtered.length / perPage);
   const paged = filtered.slice(page * perPage, (page + 1) * perPage);
@@ -158,7 +161,7 @@ export default function Members() {
               <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="Alle">Alle Rollen</SelectItem>
-                {availableRoles.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                {roleNames.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
               </SelectContent>
             </Select>
 
@@ -166,7 +169,7 @@ export default function Members() {
               <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="Alle">Alle Gruppen</SelectItem>
-                {availableGroups.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                {groupNames.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
               </SelectContent>
             </Select>
 

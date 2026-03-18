@@ -4,8 +4,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Clock, MapPin, Users, Edit } from 'lucide-react';
-import { categoryBgClasses } from '@/data/courseEventData';
 import { useEvent } from '@/hooks/use-api';
+
+const categoryBgClasses: Record<string, string> = {
+  Training: 'bg-primary text-primary-foreground',
+  Wettkampf: 'bg-destructive text-destructive-foreground',
+  Lager: 'bg-success text-success-foreground',
+  Workshop: 'bg-warning text-warning-foreground',
+  Freizeit: 'bg-primary-light text-primary-foreground',
+};
 
 const statusBadge: Record<string, string> = {
   Offen: 'bg-success/10 text-success',

@@ -7,17 +7,44 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { CheckCircle, XCircle, Clock, Search, QrCode, Camera } from 'lucide-react';
-import { todayEvents, getCheckInParticipants, type AttendanceParticipant } from '@/data/attendanceData';
+import { useEvent, useAttendance, useCheckIn } from '@/hooks/use-api';
+import { toast } from 'sonner';
+
+interface AttendanceParticipant {
+  id: string;
+  memberId: string;
+  name: string;
+  initials: string;
+  status: 'anwesend' | 'abwesend' | 'entschuldigt' | 'offen';
+  checkedInAt?: string;
+}
 
 export default function AttendanceCheckIn() {
   const { eventId } = useParams<{ eventId: string }>();
-  const event = todayEvents.find(e => e.id === eventId) || todayEvents[0];
+  const { data: event, isLoading: eventLoading } = useEvent(eventId);
+  const { data: attendanceData } = useAttendance(eventId);
+  const checkInMutation = useCheckIn();
 
-  const [participants, setParticipants] = useState<AttendanceParticipant[]>(() =>
-    getCheckInParticipants(eventId || 'te1')
-  );
+  const apiParticipants: AttendanceParticipant[] = useMemo(() => {
+    if (!attendanceData || !Array.isArray(attendanceData)) return [];
+    return (attendanceData as any[]).map((a: any) => ({
+      id: a.id || a.userId,
+      memberId: a.userId || a.memberId,
+      name: a.memberName || a.name || 'Unbekannt',
+      initials: (a.memberName || a.name || 'U').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
+      status: a.status === 'present' ? 'anwesend' as const : a.status === 'absent' ? 'abwesend' as const : a.status === 'excused' ? 'entschuldigt' as const : 'offen' as const,
+      checkedInAt: a.checkedInAt,
+    }));
+  }, [attendanceData]);
+
+  const [localOverrides, setLocalOverrides] = useState<Record<string, { status: AttendanceParticipant['status']; checkedInAt?: string }>>({});
   const [search, setSearch] = useState('');
   const [lastScan, setLastScan] = useState<string | null>(null);
+
+  const participants = useMemo(() =>
+    apiParticipants.map(p => localOverrides[p.id] ? { ...p, ...localOverrides[p.id] } : p),
+    [apiParticipants, localOverrides]
+  );
 
   const filtered = useMemo(() =>
     participants.filter(p => p.name.toLowerCase().includes(search.toLowerCase())),
@@ -30,9 +57,16 @@ export default function AttendanceCheckIn() {
   }), [participants]);
 
   const setStatus = (id: string, status: AttendanceParticipant['status']) => {
-    setParticipants(prev => prev.map(p =>
-      p.id === id ? { ...p, status, checkedInAt: status === 'anwesend' ? new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : p.checkedInAt } : p
-    ));
+    const checkedInAt = status === 'anwesend' ? new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : undefined;
+    setLocalOverrides(prev => ({ ...prev, [id]: { status, checkedInAt } }));
+
+    const p = participants.find(x => x.id === id);
+    if (p && eventId) {
+      const apiStatus = status === 'anwesend' ? 'present' : status === 'abwesend' ? 'absent' : status === 'entschuldigt' ? 'excused' : 'pending';
+      checkInMutation.mutate({ occurrenceId: eventId, userId: p.memberId, status: apiStatus }, {
+        onError: () => toast.error('Fehler beim Speichern des Status'),
+      });
+    }
   };
 
   const statusBg = (s: AttendanceParticipant['status']) => {
@@ -42,13 +76,17 @@ export default function AttendanceCheckIn() {
     return '';
   };
 
+  if (eventLoading) {
+    return <div className="text-center py-12 text-muted-foreground">Wird geladen...</div>;
+  }
+
   return (
     <div className="max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">{event.title}</h1>
-          <p className="text-muted-foreground">{event.time} · {event.location}</p>
+          <h1 className="text-2xl font-semibold text-foreground">{event?.title ?? 'Check-In'}</h1>
+          <p className="text-muted-foreground">{event?.timeStart}–{event?.timeEnd} · {event?.location}</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-center px-4 py-2 bg-primary/10 rounded-lg">
@@ -57,6 +95,10 @@ export default function AttendanceCheckIn() {
           </div>
         </div>
       </div>
+
+      {participants.length === 0 && !eventLoading && (
+        <div className="text-center py-12 text-muted-foreground">Keine Teilnehmer für diesen Termin hinterlegt.</div>
+      )}
 
       <Tabs defaultValue="list">
         <TabsList className="mb-4">

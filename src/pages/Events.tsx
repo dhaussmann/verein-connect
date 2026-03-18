@@ -6,8 +6,31 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Plus, ChevronLeft, ChevronRight, CalendarDays, List, Clock, MapPin, Users } from 'lucide-react';
-import { calendarEvents as mockCalendarEvents, type CalendarEvent, type CourseCategory, categoryBgClasses } from '@/data/courseEventData';
 import { useEventCalendar } from '@/hooks/use-api';
+
+interface CalendarEvent {
+  id: string;
+  courseId?: string;
+  title: string;
+  date: string;
+  endDate?: string;
+  timeStart: string;
+  timeEnd: string;
+  category: string;
+  location: string;
+  participants: number;
+  maxParticipants: number;
+  status: string;
+  description?: string;
+}
+
+const categoryBgClasses: Record<string, string> = {
+  Training: 'bg-primary text-primary-foreground',
+  Wettkampf: 'bg-destructive text-destructive-foreground',
+  Lager: 'bg-success text-success-foreground',
+  Workshop: 'bg-warning text-warning-foreground',
+  Freizeit: 'bg-primary-light text-primary-foreground',
+};
 
 const statusBadge: Record<string, string> = {
   Offen: 'bg-success/10 text-success',
@@ -30,11 +53,12 @@ function formatDateStr(day: number, month: number, year: number) {
 export default function Events() {
   const navigate = useNavigate();
   const [view, setView] = useState<'calendar' | 'list'>('calendar');
-  const [currentMonth, setCurrentMonth] = useState(2); // March (0-indexed)
-  const [currentYear, setCurrentYear] = useState(2026);
+  const now = new Date();
+  const [currentMonth, setCurrentMonth] = useState(now.getMonth());
+  const [currentYear, setCurrentYear] = useState(now.getFullYear());
 
   const { data: apiCalendarEvents } = useEventCalendar({ per_page: '200' });
-  const calendarEvents: CalendarEvent[] = (apiCalendarEvents as CalendarEvent[] | undefined) ?? mockCalendarEvents;
+  const calendarEvents: CalendarEvent[] = (apiCalendarEvents as CalendarEvent[] | undefined) ?? [];
 
   const prevMonth = () => {
     if (currentMonth === 0) { setCurrentMonth(11); setCurrentYear(y => y - 1); }
@@ -44,7 +68,7 @@ export default function Events() {
     if (currentMonth === 11) { setCurrentMonth(0); setCurrentYear(y => y + 1); }
     else setCurrentMonth(m => m + 1);
   };
-  const goToday = () => { setCurrentMonth(2); setCurrentYear(2026); };
+  const goToday = () => { const t = new Date(); setCurrentMonth(t.getMonth()); setCurrentYear(t.getFullYear()); };
 
   // Build calendar grid
   const calendarGrid = useMemo(() => {
@@ -103,7 +127,10 @@ export default function Events() {
     return groups;
   }, []);
 
-  const isToday = (dateStr: string) => dateStr === '17.03.2026';
+  const isToday = (dateStr: string) => {
+    const t = new Date();
+    return dateStr === formatDateStr(t.getDate(), t.getMonth(), t.getFullYear());
+  };
 
   return (
     <div>

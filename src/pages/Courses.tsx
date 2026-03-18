@@ -10,8 +10,16 @@ import { Progress } from '@/components/ui/progress';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Search, LayoutGrid, List, Clock, MapPin, Users, AlertCircle } from 'lucide-react';
-import { type Course, type CourseCategory, categoryBgClasses } from '@/data/courseEventData';
 import { useEvents } from '@/hooks/use-api';
+import type { Event } from '@/lib/api';
+
+const categoryBgClasses: Record<string, string> = {
+  Training: 'bg-primary text-primary-foreground',
+  Wettkampf: 'bg-destructive text-destructive-foreground',
+  Lager: 'bg-success text-success-foreground',
+  Workshop: 'bg-warning text-warning-foreground',
+  Freizeit: 'bg-primary-light text-primary-foreground',
+};
 
 const statusStyles: Record<string, string> = {
   Aktiv: 'bg-success/10 text-success border-success/20',
@@ -20,11 +28,11 @@ const statusStyles: Record<string, string> = {
   Abgesagt: 'bg-destructive/10 text-destructive border-destructive/20',
 };
 
-function participantPercent(c: Course) {
-  return Math.round((c.participants / c.maxParticipants) * 100);
+function participantPercent(c: Event) {
+  return c.maxParticipants > 0 ? Math.round((c.participants / c.maxParticipants) * 100) : 0;
 }
 
-function progressColor(c: Course) {
+function progressColor(c: Event) {
   const p = participantPercent(c);
   if (p >= 100) return 'bg-destructive';
   if (p >= 80) return 'bg-warning';
@@ -39,7 +47,7 @@ export default function Courses() {
   const [view, setView] = useState<'grid' | 'list'>('grid');
 
   const { data: eventsData, isLoading, error } = useEvents({ event_type: 'course', per_page: '200' });
-  const courses: Course[] = (eventsData?.data ?? []) as unknown as Course[];
+  const courses: Event[] = eventsData?.data ?? [];
 
   const filtered = useMemo(() => {
     return courses.filter(c => {
@@ -67,7 +75,7 @@ export default function Courses() {
           <SelectTrigger className="w-[160px]"><SelectValue placeholder="Kategorie" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Alle Kategorien</SelectItem>
-            {(['Training', 'Wettkampf', 'Lager', 'Workshop', 'Freizeit'] as CourseCategory[]).map(c => (
+            {['Training', 'Wettkampf', 'Lager', 'Workshop', 'Freizeit'].map(c => (
               <SelectItem key={c} value={c}>{c}</SelectItem>
             ))}
           </SelectContent>
@@ -138,7 +146,7 @@ export default function Courses() {
   );
 }
 
-function CourseCard({ course: c, onClick }: { course: Course; onClick: () => void }) {
+function CourseCard({ course: c, onClick }: { course: Event; onClick: () => void }) {
   const pct = participantPercent(c);
   const catColor = {
     Training: 'bg-primary',

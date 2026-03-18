@@ -8,8 +8,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-import { availableRoles, availableGroups, customFieldDefinitions } from '@/data/mockData';
-import { useCreateMember } from '@/hooks/use-api';
+import { useCreateMember, useRoles, useGroups, useProfileFields } from '@/hooks/use-api';
+import { useQueryClient } from '@tanstack/react-query';
 import { Calendar as CalIcon, Upload } from 'lucide-react';
 
 export default function MemberNew() {
@@ -18,6 +18,13 @@ export default function MemberNew() {
   const [dynamicFields, setDynamicFields] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const createMember = useCreateMember();
+  const queryClient = useQueryClient();
+  const { data: rolesData } = useRoles();
+  const { data: groupsData } = useGroups();
+  const { data: profileFieldsData } = useProfileFields();
+  const roleNames = (rolesData || []).map((r: any) => r.name);
+  const groupNames = (groupsData?.data || []).map((g: any) => ({ id: g.id, name: g.name }));
+  const profileFields = (profileFieldsData || []) as any[];
 
   const updateDynamic = (key: string, value: string) =>
     setDynamicFields((f) => ({ ...f, [key]: value }));
@@ -42,6 +49,7 @@ export default function MemberNew() {
         status: (fd.get('status') as string || 'active') as 'Aktiv',
         customFields: dynamicFields,
       });
+      await queryClient.invalidateQueries({ queryKey: ['members'] });
       navigate('/members');
     } catch (err: any) {
       setFormError(err.message || 'Fehler beim Erstellen');
@@ -159,7 +167,7 @@ export default function MemberNew() {
                   <Select defaultValue="Mitglied">
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {availableRoles.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                      {roleNames.map((r: string) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -168,7 +176,7 @@ export default function MemberNew() {
                   <Select>
                     <SelectTrigger><SelectValue placeholder="Bitte wählen" /></SelectTrigger>
                     <SelectContent>
-                      {availableGroups.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                      {groupNames.map((g: any) => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -181,23 +189,23 @@ export default function MemberNew() {
             <div>
               <h2 className="text-base font-semibold mb-4">Zusatzfelder</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {customFieldDefinitions.map((cf) => (
-                  <div key={cf.key} className="space-y-2">
+                {profileFields.map((cf: any) => (
+                  <div key={cf.name} className="space-y-2">
                     <Label>{cf.label}</Label>
                     {cf.type === 'text' && (
-                      <Input value={dynamicFields[cf.key] || ''} onChange={(e) => updateDynamic(cf.key, e.target.value)} />
+                      <Input value={dynamicFields[cf.name] || ''} onChange={(e) => updateDynamic(cf.name, e.target.value)} />
                     )}
                     {cf.type === 'select' && (
-                      <Select value={dynamicFields[cf.key] || ''} onValueChange={(v) => updateDynamic(cf.key, v)}>
+                      <Select value={dynamicFields[cf.name] || ''} onValueChange={(v) => updateDynamic(cf.name, v)}>
                         <SelectTrigger><SelectValue placeholder="Bitte wählen" /></SelectTrigger>
                         <SelectContent>
-                          {cf.options?.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                          {(cf.options || []).map((o: string) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     )}
                     {cf.type === 'checkbox' && (
                       <div className="flex items-center gap-2 pt-1">
-                        <Checkbox checked={dynamicFields[cf.key] === 'true'} onCheckedChange={(c) => updateDynamic(cf.key, c ? 'true' : 'false')} />
+                        <Checkbox checked={dynamicFields[cf.name] === 'true'} onCheckedChange={(c) => updateDynamic(cf.name, c ? 'true' : 'false')} />
                         <span className="text-sm">{cf.label}</span>
                       </div>
                     )}

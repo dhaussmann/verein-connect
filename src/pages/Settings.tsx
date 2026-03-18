@@ -13,23 +13,40 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Edit, Trash2, Upload, Copy, GripVertical, Search, Shield, Check, X, Globe, Link2, FileDown, UserPlus, Users } from 'lucide-react';
-import { roles, fieldDefinitions, auditLog, permissionCategories, permissionActions, retentionPolicies, type RoleDefinition } from '@/data/settingsData';
-import { useMembers, useCreateMember, useRoles, useAssignRole, useRemoveRole } from '@/hooks/use-api';
+import { useMembers, useCreateMember, useRoles, useAssignRole, useRemoveRole, useProfileFields, useAuditLog } from '@/hooks/use-api';
 import { toast } from 'sonner';
+import type { Role } from '@/lib/api';
+
+const permissionCategories = ['Mitglieder', 'Kurse', 'Termine', 'Finanzen', 'Kommunikation', 'Shop', 'Dateien', 'Einstellungen'];
+const permissionActions = ['Lesen', 'Erstellen', 'Bearbeiten', 'Löschen'];
+const retentionPolicies = [
+  { dataType: 'Kontaktdaten', days: 90, description: 'Nach Austritt' },
+  { dataType: 'Finanzdaten', days: 3650, description: '10 Jahre gesetzlich' },
+  { dataType: 'Gesundheitsdaten', days: 365, description: 'Nach Austritt' },
+  { dataType: 'Kommunikation', days: 180, description: 'Nach letzter Aktivität' },
+  { dataType: 'Anwesenheitsdaten', days: 730, description: '2 Jahre' },
+  { dataType: 'Fotos/Medien', days: 365, description: 'Nach Austritt' },
+];
 
 export default function Settings() {
   const [roleEditorOpen, setRoleEditorOpen] = useState(false);
-  const [editingRole, setEditingRole] = useState<RoleDefinition | null>(null);
+  const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [fieldEditorOpen, setFieldEditorOpen] = useState(false);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [userSearch, setUserSearch] = useState('');
 
-  // API hooks for User Management
+  // API hooks
   const { data: membersData, isLoading: membersLoading } = useMembers({ per_page: '200' });
   const { data: apiRoles } = useRoles();
+  const { data: profileFieldsData } = useProfileFields();
+  const { data: auditLogData } = useAuditLog({ per_page: '50' });
   const createMember = useCreateMember();
   const assignRole = useAssignRole();
   const removeRole = useRemoveRole();
+
+  const roles: Role[] = apiRoles ?? [];
+  const fieldDefinitions: any[] = Array.isArray(profileFieldsData) ? profileFieldsData : (profileFieldsData as any)?.data ?? [];
+  const auditLog: any[] = Array.isArray(auditLogData) ? auditLogData : (auditLogData as any)?.data ?? [];
 
   const allUsers = membersData?.data ?? [];
   const filteredUsers = allUsers.filter(u =>
@@ -80,7 +97,7 @@ export default function Settings() {
     }
   };
 
-  const openRoleEditor = (role?: RoleDefinition) => {
+  const openRoleEditor = (role?: Role) => {
     setEditingRole(role || null);
     setRoleEditorOpen(true);
   };
@@ -230,13 +247,17 @@ export default function Settings() {
                         <p className="text-sm text-muted-foreground mb-2">{role.description}</p>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <span>{role.memberCount} Mitglieder</span>
-                          <span>·</span>
-                          <div className="flex flex-wrap gap-1">
-                            {Object.entries(role.permissions).slice(0, 3).map(([cat, acts]) => (
-                              <Badge key={cat} variant="outline" className="text-xs">{cat}: {acts.join(', ')}</Badge>
-                            ))}
-                            {Object.keys(role.permissions).length > 3 && <Badge variant="outline" className="text-xs">+{Object.keys(role.permissions).length - 3}</Badge>}
-                          </div>
+                          {role.permissions.length > 0 && (
+                            <>
+                              <span>·</span>
+                              <div className="flex flex-wrap gap-1">
+                                {role.permissions.slice(0, 3).map(p => (
+                                  <Badge key={p} variant="outline" className="text-xs">{p}</Badge>
+                                ))}
+                                {role.permissions.length > 3 && <Badge variant="outline" className="text-xs">+{role.permissions.length - 3}</Badge>}
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                       <div className="flex gap-1">
@@ -247,6 +268,9 @@ export default function Settings() {
                   </CardContent>
                 </Card>
               ))}
+              {roles.length === 0 && (
+                <p className="text-muted-foreground text-sm text-center py-8">Keine Rollen vorhanden.</p>
+              )}
             </div>
           </TabsContent>
 
@@ -270,14 +294,14 @@ export default function Settings() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {fieldDefinitions.map((f, i) => (
-                    <TableRow key={f.id} className={i % 2 === 1 ? 'bg-muted/50' : ''}>
+                  {fieldDefinitions.map((f: any, i: number) => (
+                    <TableRow key={f.id || i} className={i % 2 === 1 ? 'bg-muted/50' : ''}>
                       <TableCell><GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" /></TableCell>
-                      <TableCell className="font-mono text-sm">{f.internalName}</TableCell>
-                      <TableCell className="font-medium">{f.displayName}</TableCell>
-                      <TableCell><Badge variant="secondary">{f.type}</Badge></TableCell>
-                      <TableCell className="text-center">{f.required ? <Check className="h-4 w-4 text-success mx-auto" /> : <X className="h-4 w-4 text-muted-foreground mx-auto" />}</TableCell>
-                      <TableCell className="text-center">{f.searchable ? <Search className="h-4 w-4 text-primary mx-auto" /> : <X className="h-4 w-4 text-muted-foreground mx-auto" />}</TableCell>
+                      <TableCell className="font-mono text-sm">{f.internalName || f.name || f.field_name}</TableCell>
+                      <TableCell className="font-medium">{f.displayName || f.label || f.display_name}</TableCell>
+                      <TableCell><Badge variant="secondary">{f.type || f.field_type}</Badge></TableCell>
+                      <TableCell className="text-center">{f.required || f.is_required ? <Check className="h-4 w-4 text-success mx-auto" /> : <X className="h-4 w-4 text-muted-foreground mx-auto" />}</TableCell>
+                      <TableCell className="text-center">{f.searchable || f.is_searchable ? <Search className="h-4 w-4 text-primary mx-auto" /> : <X className="h-4 w-4 text-muted-foreground mx-auto" />}</TableCell>
                       <TableCell>
                         <div className="flex gap-1">
                           <Button variant="ghost" size="icon" className="h-8 w-8"><Edit className="h-3.5 w-3.5" /></Button>
@@ -286,6 +310,9 @@ export default function Settings() {
                       </TableCell>
                     </TableRow>
                   ))}
+                  {fieldDefinitions.length === 0 && (
+                    <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Keine Profilfelder vorhanden.</TableCell></TableRow>
+                  )}
                 </TableBody>
               </Table>
             </Card>
@@ -395,19 +422,26 @@ export default function Settings() {
                   <Table>
                     <TableHeader><TableRow><TableHead>Zeitpunkt</TableHead><TableHead>Benutzer</TableHead><TableHead>Aktion</TableHead><TableHead>Details</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {auditLog.map((entry, i) => (
-                        <TableRow key={entry.id} className={i % 2 === 1 ? 'bg-muted/50' : ''}>
-                          <TableCell className="text-muted-foreground text-xs whitespace-nowrap">{entry.timestamp}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Avatar className="h-6 w-6"><AvatarFallback className="bg-primary-lightest text-primary text-[10px]">{entry.userInitials}</AvatarFallback></Avatar>
-                              <span className="text-sm">{entry.user}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell><Badge variant="secondary" className="text-xs">{entry.action}</Badge></TableCell>
-                          <TableCell className="text-sm text-muted-foreground">{entry.details}</TableCell>
-                        </TableRow>
-                      ))}
+                      {auditLog.map((entry: any, i: number) => {
+                        const userName = entry.user || entry.userName || entry.user_name || '–';
+                        const initials = entry.userInitials || userName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
+                        return (
+                          <TableRow key={entry.id || i} className={i % 2 === 1 ? 'bg-muted/50' : ''}>
+                            <TableCell className="text-muted-foreground text-xs whitespace-nowrap">{entry.timestamp || entry.created_at}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Avatar className="h-6 w-6"><AvatarFallback className="bg-primary-lightest text-primary text-[10px]">{initials}</AvatarFallback></Avatar>
+                                <span className="text-sm">{userName}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell><Badge variant="secondary" className="text-xs">{entry.action}</Badge></TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{entry.details || entry.description}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      {auditLog.length === 0 && (
+                        <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">Keine Audit-Log-Einträge vorhanden.</TableCell></TableRow>
+                      )}
                     </TableBody>
                   </Table>
                 </CardContent>
@@ -452,11 +486,14 @@ export default function Settings() {
                     {permissionCategories.map(cat => (
                       <TableRow key={cat}>
                         <TableCell className="font-medium text-sm">{cat}</TableCell>
-                        {permissionActions.map(act => (
-                          <TableCell key={act} className="text-center">
-                            <Checkbox defaultChecked={editingRole?.permissions[cat]?.includes(act)} />
-                          </TableCell>
-                        ))}
+                        {permissionActions.map(act => {
+                          const permKey = `${cat.toLowerCase()}:${act.toLowerCase()}`;
+                          return (
+                            <TableCell key={act} className="text-center">
+                              <Checkbox defaultChecked={editingRole?.permissions?.includes(permKey)} />
+                            </TableCell>
+                          );
+                        })}
                       </TableRow>
                     ))}
                   </TableBody>

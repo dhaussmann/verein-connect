@@ -30,6 +30,14 @@ import MyProfile from "@/pages/portal/MyProfile";
 import MyCourses from "@/pages/portal/MyCourses";
 import MyEvents from "@/pages/portal/MyEvents";
 import { RoleRedirect } from "@/components/layout/RoleRedirect";
+import Contracts from "@/pages/Contracts";
+import ContractDetail from "@/pages/ContractDetail";
+import ContractNew from "@/pages/ContractNew";
+import ContractSettingsPage from "@/pages/ContractSettingsPage";
+import ContractApplications from "@/pages/ContractApplications";
+import Groups from "@/pages/Groups";
+import GroupDetail from "@/pages/GroupDetail";
+import ContractBilling from "@/pages/ContractBilling";
 
 const queryClient = new QueryClient();
 
@@ -61,6 +69,14 @@ const App = () => (
             <Route path="/communication" element={<Communication />} />
             <Route path="/communication/chat" element={<Communication />} />
             <Route path="/communication/email" element={<Communication />} />
+            <Route path="/contracts" element={<Contracts />} />
+            <Route path="/contracts/new" element={<ContractNew />} />
+            <Route path="/contracts/settings" element={<ContractSettingsPage />} />
+            <Route path="/contracts/:id" element={<ContractDetail />} />
+            <Route path="/billing" element={<ContractBilling />} />
+            <Route path="/applications" element={<ContractApplications />} />
+            <Route path="/groups" element={<Groups />} />
+            <Route path="/groups/:id" element={<GroupDetail />} />
             <Route path="/finance" element={<Finance />} />
             <Route path="/finance/accounting" element={<Finance />} />
             <Route path="/shop" element={<Shop />} />
