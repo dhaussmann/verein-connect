@@ -5,13 +5,22 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { ArrowLeft, Mail } from 'lucide-react';
+import { authApi } from '@/lib/api';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsLoading(true);
+    try {
+      await authApi.forgotPassword(email);
+    } catch {
+      // Always show success to not leak email existence
+    }
+    setIsLoading(false);
     setSent(true);
   };
 
@@ -45,7 +54,9 @@ export default function ForgotPassword() {
                 <Label htmlFor="email">E-Mail</Label>
                 <Input id="email" type="email" placeholder="name@verein.de" value={email} onChange={(e) => setEmail(e.target.value)} required />
               </div>
-              <Button type="submit" className="w-full">Link senden</Button>
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? 'Wird gesendet...' : 'Link senden'}
+              </Button>
               <Link to="/login" className="block text-center text-sm text-primary-light hover:underline">
                 <ArrowLeft className="h-3 w-3 inline mr-1" />Zurück zum Login
               </Link>

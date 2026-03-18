@@ -20,7 +20,9 @@ import {
   Pencil, MessageSquare, UserMinus, Star, Save, ChevronLeft, ChevronRight,
   Users, Send, Receipt, FileSpreadsheet,
 } from 'lucide-react';
-import { members as allMembers, availableRoles, availableGroups, type Member } from '@/data/mockData';
+import { availableRoles, availableGroups } from '@/data/mockData';
+import { useMembers } from '@/hooks/use-api';
+import type { Member } from '@/lib/api';
 
 type SortKey = 'name' | 'email' | 'memberNumber' | 'status' | 'joinDate';
 type SortDir = 'asc' | 'desc';
@@ -42,6 +44,9 @@ export default function Members() {
   const [saveFilterOpen, setSaveFilterOpen] = useState(false);
   const [filterName, setFilterName] = useState('');
   const [savedFilters, setSavedFilters] = useState<string[]>([]);
+
+  const { data: membersData, isLoading, error } = useMembers({ per_page: '200' });
+  const allMembers: Member[] = membersData?.data ?? [];
 
   const filtered = useMemo(() => {
     let list = [...allMembers];
@@ -104,6 +109,24 @@ export default function Members() {
       setSaveFilterOpen(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div>
+        <PageHeader title="Mitglieder" action={<Button disabled><Plus className="h-4 w-4 mr-2" />Neues Mitglied</Button>} />
+        <Card className="bg-popover shadow-sm"><CardContent className="p-8 text-center text-muted-foreground">Mitglieder werden geladen...</CardContent></Card>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div>
+        <PageHeader title="Mitglieder" />
+        <Card className="bg-popover shadow-sm"><CardContent className="p-8 text-center text-destructive">Fehler beim Laden: {error.message}</CardContent></Card>
+      </div>
+    );
+  }
 
   return (
     <div>

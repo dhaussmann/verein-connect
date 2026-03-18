@@ -9,15 +9,19 @@ import { Eye, EyeOff } from 'lucide-react';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, isLoading } = useAuthStore();
+  const { login, isLoading, error, clearError } = useAuthStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await login(email, password);
-    navigate('/dashboard');
+    try {
+      await login(email, password);
+      navigate('/dashboard');
+    } catch {
+      // error is set in the store
+    }
   };
 
   return (
@@ -46,6 +50,11 @@ export default function Login() {
               </div>
               <Link to="/forgot-password" className="text-sm text-primary-light hover:underline">Passwort vergessen?</Link>
             </div>
+            {error && (
+              <div className="bg-destructive/10 text-destructive text-sm rounded-md p-3">
+                {error}
+              </div>
+            )}
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? 'Wird angemeldet...' : 'Anmelden'}
             </Button>

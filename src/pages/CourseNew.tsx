@@ -16,7 +16,8 @@ import { CalendarIcon, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { members } from '@/data/mockData';
+import { useMembers } from '@/hooks/use-api';
+import { useCreateEvent } from '@/hooks/use-api';
 import { toast } from 'sonner';
 
 const weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -37,13 +38,37 @@ export default function CourseNew() {
     setSelectedDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    toast.success('Kurs/Termin wurde erfolgreich erstellt!');
-    navigate('/courses');
-  };
+  const createEvent = useCreateEvent();
+  const { data: membersData } = useMembers({ per_page: '200' });
+  const trainers = (membersData?.data ?? []).filter(m => m.roles?.includes('Trainer') || m.roles?.includes('trainer'));
 
-  const trainers = members.filter(m => m.roles.includes('Trainer'));
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const form = e.target as HTMLFormElement;
+    const fd = new FormData(form);
+    try {
+      await createEvent.mutateAsync({
+        title: fd.get('title') as string,
+        description: fd.get('description') as string || '',
+        eventType: eventType === 'Einmalig' ? 'single' : eventType === 'Wiederkehrend' ? 'recurring' : 'course',
+        location: fd.get('location') as string || '',
+        startDate: startDate?.toISOString().slice(0, 10) || '',
+        endDate: endDate?.toISOString().slice(0, 10) || '',
+        timeStart: fd.get('timeStart') as string || '',
+        timeEnd: fd.get('timeEnd') as string || '',
+        maxParticipants: Number(fd.get('maxParticipants')) || 0,
+        price: costEnabled ? Number(fd.get('price')) || null : null,
+        autoInvoice,
+        isPublic,
+        weekdays: selectedDays,
+        status: 'Entwurf',
+      } as any);
+      toast.success('Kurs/Termin wurde erfolgreich erstellt!');
+      navigate('/courses');
+    } catch (err: any) {
+      toast.error(err.message || 'Fehler beim Erstellen');
+    }
+  };
 
   return (
     <div>

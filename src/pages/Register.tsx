@@ -13,7 +13,7 @@ const steps = ['Verein', 'Admin-Account', 'Bestätigung'];
 
 export default function Register() {
   const navigate = useNavigate();
-  const { register, isLoading } = useAuthStore();
+  const { register, isLoading, error, clearError } = useAuthStore();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
     clubName: '', clubType: '', website: '',
@@ -24,12 +24,16 @@ export default function Register() {
   const update = (field: string, value: string | boolean) => setForm((f) => ({ ...f, [field]: value }));
 
   const handleSubmit = async () => {
-    await register({
-      clubName: form.clubName, clubType: form.clubType,
-      firstName: form.firstName, lastName: form.lastName,
-      email: form.email, password: form.password,
-    });
-    navigate('/dashboard');
+    try {
+      await register({
+        clubName: form.clubName, clubType: form.clubType,
+        firstName: form.firstName, lastName: form.lastName,
+        email: form.email, password: form.password,
+      });
+      navigate('/dashboard');
+    } catch {
+      // error is set in the store
+    }
   };
 
   const pwStrength = form.password.length >= 8 ? (form.password.length >= 12 ? 'Stark' : 'Mittel') : 'Schwach';
@@ -139,6 +143,11 @@ export default function Register() {
                 <Button className="flex-1" onClick={handleSubmit} disabled={!form.dsgvo || isLoading}>
                   {isLoading ? 'Wird erstellt...' : 'Verein erstellen'}
                 </Button>
+                {error && (
+                  <div className="bg-destructive/10 text-destructive text-sm rounded-md p-3 w-full">
+                    {error}
+                  </div>
+                )}
               </div>
             </div>
           )}

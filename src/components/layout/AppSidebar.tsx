@@ -3,13 +3,14 @@ import {
   LayoutDashboard, Users, GraduationCap, Calendar,
   ClipboardCheck, MessageSquare, Receipt, ShoppingBag,
   FolderArchive, Settings, ChevronLeft, ChevronRight, LogOut,
+  User, BookOpen,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 
-const navItems = [
+const adminNavItems = [
   { title: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { title: 'Mitglieder', path: '/members', icon: Users },
   { title: 'Kurse', path: '/courses', icon: GraduationCap },
@@ -20,6 +21,13 @@ const navItems = [
   { title: 'Webshop', path: '/shop', icon: ShoppingBag },
   { title: 'Materialbank', path: '/files', icon: FolderArchive },
   { title: 'Einstellungen', path: '/settings', icon: Settings },
+];
+
+const memberNavItems = [
+  { title: 'Übersicht', path: '/portal', icon: LayoutDashboard },
+  { title: 'Mein Profil', path: '/portal/profile', icon: User },
+  { title: 'Meine Kurse', path: '/portal/courses', icon: GraduationCap },
+  { title: 'Meine Anwesenheit', path: '/portal/attendance', icon: ClipboardCheck },
 ];
 
 interface AppSidebarProps {
@@ -62,7 +70,7 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: A
 
       {/* Navigation */}
       <nav className="flex-1 py-2 overflow-y-auto">
-        {navItems.map((item) => {
+        {(user?.role === 'admin' || user?.role === 'trainer' ? adminNavItems : memberNavItems).map((item) => {
           const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
           return (
             <button

@@ -6,7 +6,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Plus, ChevronLeft, ChevronRight, CalendarDays, List, Clock, MapPin, Users } from 'lucide-react';
-import { calendarEvents, type CalendarEvent, type CourseCategory, categoryBgClasses } from '@/data/courseEventData';
+import { calendarEvents as mockCalendarEvents, type CalendarEvent, type CourseCategory, categoryBgClasses } from '@/data/courseEventData';
+import { useEventCalendar } from '@/hooks/use-api';
 
 const statusBadge: Record<string, string> = {
   Offen: 'bg-success/10 text-success',
@@ -31,6 +32,9 @@ export default function Events() {
   const [view, setView] = useState<'calendar' | 'list'>('calendar');
   const [currentMonth, setCurrentMonth] = useState(2); // March (0-indexed)
   const [currentYear, setCurrentYear] = useState(2026);
+
+  const { data: apiCalendarEvents } = useEventCalendar({ per_page: '200' });
+  const calendarEvents: CalendarEvent[] = (apiCalendarEvents as CalendarEvent[] | undefined) ?? mockCalendarEvents;
 
   const prevMonth = () => {
     if (currentMonth === 0) { setCurrentMonth(11); setCurrentYear(y => y - 1); }

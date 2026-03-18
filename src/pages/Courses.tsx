@@ -10,7 +10,8 @@ import { Progress } from '@/components/ui/progress';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Search, LayoutGrid, List, Clock, MapPin, Users, AlertCircle } from 'lucide-react';
-import { courses, type Course, type CourseCategory, categoryBgClasses } from '@/data/courseEventData';
+import { type Course, type CourseCategory, categoryBgClasses } from '@/data/courseEventData';
+import { useEvents } from '@/hooks/use-api';
 
 const statusStyles: Record<string, string> = {
   Aktiv: 'bg-success/10 text-success border-success/20',
@@ -37,6 +38,9 @@ export default function Courses() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [view, setView] = useState<'grid' | 'list'>('grid');
 
+  const { data: eventsData, isLoading, error } = useEvents({ event_type: 'course', per_page: '200' });
+  const courses: Course[] = (eventsData?.data ?? []) as unknown as Course[];
+
   const filtered = useMemo(() => {
     return courses.filter(c => {
       const matchSearch = !search || c.title.toLowerCase().includes(search.toLowerCase()) || c.instructorName.toLowerCase().includes(search.toLowerCase());
@@ -44,7 +48,7 @@ export default function Courses() {
       const matchStatus = statusFilter === 'all' || c.status === statusFilter;
       return matchSearch && matchCat && matchStatus;
     });
-  }, [search, catFilter, statusFilter]);
+  }, [search, catFilter, statusFilter, courses]);
 
   return (
     <div>
@@ -121,7 +125,13 @@ export default function Courses() {
         </Card>
       )}
 
-      {filtered.length === 0 && (
+      {isLoading && (
+        <div className="text-center py-12 text-muted-foreground">Kurse werden geladen...</div>
+      )}
+      {error && (
+        <div className="text-center py-12 text-destructive">Fehler beim Laden: {error.message}</div>
+      )}
+      {!isLoading && !error && filtered.length === 0 && (
         <div className="text-center py-12 text-muted-foreground">Keine Kurse gefunden.</div>
       )}
     </div>

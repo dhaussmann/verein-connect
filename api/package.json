@@ -1,0 +1,30 @@
+{
+  "name": "verein-connect-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 execute verein-connect-db --local --file=src/db/migrations/0001_initial.sql",
+    "db:seed:local": "wrangler d1 execute verein-connect-db --local --file=src/db/seed.sql",
+    "db:migrate:remote": "wrangler d1 execute verein-connect-db --remote --file=src/db/migrations/0001_initial.sql",
+    "db:seed:remote": "wrangler d1 execute verein-connect-db --remote --file=src/db/seed.sql",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "^4.7.0",
+    "drizzle-orm": "^0.38.0",
+    "zod": "^3.25.0",
+    "jose": "^6.0.0",
+    "bcryptjs": "^2.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250310.0",
+    "@types/bcryptjs": "^2.4.6",
+    "drizzle-kit": "^0.30.0",
+    "typescript": "^5.8.0",
+    "wrangler": "^4.0.0"
+  }
+}

@@ -25,6 +25,11 @@ import Files from "@/pages/Files";
 import Settings from "@/pages/Settings";
 import StubPage from "@/pages/StubPage";
 import NotFound from "@/pages/NotFound";
+import MemberDashboard from "@/pages/portal/MemberDashboard";
+import MyProfile from "@/pages/portal/MyProfile";
+import MyCourses from "@/pages/portal/MyCourses";
+import MyEvents from "@/pages/portal/MyEvents";
+import { RoleRedirect } from "@/components/layout/RoleRedirect";
 
 const queryClient = new QueryClient();
 
@@ -35,7 +40,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<RoleRedirect />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -63,6 +68,10 @@ const App = () => (
             <Route path="/settings" element={<Settings />} />
             <Route path="/settings/roles" element={<Settings />} />
             <Route path="/settings/fields" element={<Settings />} />
+            <Route path="/portal" element={<MemberDashboard />} />
+            <Route path="/portal/profile" element={<MyProfile />} />
+            <Route path="/portal/courses" element={<MyCourses />} />
+            <Route path="/portal/attendance" element={<MyEvents />} />
           </Route>
 
           <Route path="*" element={<NotFound />} />

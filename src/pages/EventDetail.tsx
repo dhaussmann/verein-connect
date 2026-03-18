@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Clock, MapPin, Users, Edit } from 'lucide-react';
-import { calendarEvents, categoryBgClasses } from '@/data/courseEventData';
+import { categoryBgClasses } from '@/data/courseEventData';
+import { useEvent } from '@/hooks/use-api';
 
 const statusBadge: Record<string, string> = {
   Offen: 'bg-success/10 text-success',
@@ -15,9 +16,13 @@ const statusBadge: Record<string, string> = {
 export default function EventDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const event = calendarEvents.find(e => e.id === id);
+  const { data: event, isLoading, error } = useEvent(id);
 
-  if (!event) {
+  if (isLoading) {
+    return <div className="text-center py-12 text-muted-foreground">Termin wird geladen...</div>;
+  }
+
+  if (error || !event) {
     return <div className="text-center py-12 text-muted-foreground">Termin nicht gefunden.</div>;
   }
 
@@ -37,7 +42,7 @@ export default function EventDetail() {
                 <Badge variant="outline" className={statusBadge[event.status]}>{event.status}</Badge>
               </div>
               <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1"><Clock className="h-4 w-4" />{event.date}, {event.timeStart}–{event.timeEnd}</span>
+                <span className="flex items-center gap-1"><Clock className="h-4 w-4" />{event.startDate}, {event.timeStart}–{event.timeEnd}</span>
                 <span className="flex items-center gap-1"><MapPin className="h-4 w-4" />{event.location}</span>
                 <span className="flex items-center gap-1"><Users className="h-4 w-4" />{event.participants}/{event.maxParticipants} Teilnehmer</span>
               </div>

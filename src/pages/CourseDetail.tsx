@@ -9,7 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ArrowLeft, Clock, MapPin, Users, Euro, Edit, MoreHorizontal, Check, X, Minus, UserPlus } from 'lucide-react';
-import { courses, getCourseParticipants, getCourseAttendanceMatrix, categoryBgClasses } from '@/data/courseEventData';
+import { getCourseParticipants, getCourseAttendanceMatrix, categoryBgClasses } from '@/data/courseEventData';
+import { useEvent } from '@/hooks/use-api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const statusStyles: Record<string, string> = {
@@ -28,10 +29,14 @@ const participantStatusStyles: Record<string, string> = {
 export default function CourseDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const course = courses.find(c => c.id === id);
+  const { data: course, isLoading, error } = useEvent(id);
   const [tab, setTab] = useState('info');
 
-  if (!course) {
+  if (isLoading) {
+    return <div className="text-center py-12 text-muted-foreground">Kurs wird geladen...</div>;
+  }
+
+  if (error || !course) {
     return <div className="text-center py-12 text-muted-foreground">Kurs nicht gefunden.</div>;
   }
 

@@ -12,13 +12,73 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Upload, Copy, GripVertical, Search, Shield, Check, X, Globe, Link2, FileDown } from 'lucide-react';
+import { Plus, Edit, Trash2, Upload, Copy, GripVertical, Search, Shield, Check, X, Globe, Link2, FileDown, UserPlus, Users } from 'lucide-react';
 import { roles, fieldDefinitions, auditLog, permissionCategories, permissionActions, retentionPolicies, type RoleDefinition } from '@/data/settingsData';
+import { useMembers, useCreateMember, useRoles, useAssignRole, useRemoveRole } from '@/hooks/use-api';
+import { toast } from 'sonner';
 
 export default function Settings() {
   const [roleEditorOpen, setRoleEditorOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<RoleDefinition | null>(null);
   const [fieldEditorOpen, setFieldEditorOpen] = useState(false);
+  const [userDialogOpen, setUserDialogOpen] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
+
+  // API hooks for User Management
+  const { data: membersData, isLoading: membersLoading } = useMembers({ per_page: '200' });
+  const { data: apiRoles } = useRoles();
+  const createMember = useCreateMember();
+  const assignRole = useAssignRole();
+  const removeRole = useRemoveRole();
+
+  const allUsers = membersData?.data ?? [];
+  const filteredUsers = allUsers.filter(u =>
+    !userSearch ||
+    `${u.firstName} ${u.lastName}`.toLowerCase().includes(userSearch.toLowerCase()) ||
+    u.email.toLowerCase().includes(userSearch.toLowerCase())
+  );
+
+  const systemRoles = (apiRoles ?? []).filter(r => ['org_admin', 'trainer', 'member'].includes(r.name));
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const form = e.target as HTMLFormElement;
+    const fd = new FormData(form);
+    const selectedRoleIds = (apiRoles ?? [])
+      .filter(r => fd.get(`role_${r.id}`) === 'on')
+      .map(r => r.id);
+    try {
+      await createMember.mutateAsync({
+        firstName: fd.get('firstName') as string,
+        lastName: fd.get('lastName') as string,
+        email: fd.get('email') as string,
+        password: fd.get('password') as string,
+        role_ids: selectedRoleIds.length > 0 ? selectedRoleIds : undefined,
+      } as any);
+      toast.success('Benutzer wurde erfolgreich erstellt!');
+      setUserDialogOpen(false);
+      form.reset();
+    } catch (err: any) {
+      toast.error(err.message || 'Fehler beim Erstellen');
+    }
+  };
+
+  const handleToggleAdminRole = async (userId: string, currentRoles: string[]) => {
+    const adminRole = (apiRoles ?? []).find(r => r.name === 'org_admin');
+    if (!adminRole) return;
+    const isAdmin = currentRoles.includes('org_admin');
+    try {
+      if (isAdmin) {
+        await removeRole.mutateAsync({ roleId: adminRole.id, userId });
+        toast.success('Admin-Rolle entfernt');
+      } else {
+        await assignRole.mutateAsync({ roleId: adminRole.id, userId });
+        toast.success('Admin-Rolle zugewiesen');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Fehler bei Rollenzuweisung');
+    }
+  };
 
   const openRoleEditor = (role?: RoleDefinition) => {
     setEditingRole(role || null);
@@ -32,6 +92,7 @@ export default function Settings() {
       <Tabs defaultValue="general" orientation="vertical" className="flex flex-col md:flex-row gap-6">
         <TabsList className="flex md:flex-col h-auto md:w-56 bg-transparent gap-1 shrink-0">
           {[
+            ['users', 'Benutzer'],
             ['general', 'Allgemein'],
             ['roles', 'Rollen & Berechtigungen'],
             ['fields', 'Profilfelder'],
@@ -44,6 +105,75 @@ export default function Settings() {
         </TabsList>
 
         <div className="flex-1 min-w-0">
+          {/* BENUTZER */}
+          <TabsContent value="users">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2"><Users className="h-5 w-5" /> Benutzer verwalten</h2>
+              <Button onClick={() => setUserDialogOpen(true)}><UserPlus className="h-4 w-4 mr-2" /> Neuer Benutzer</Button>
+            </div>
+            <div className="mb-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="Benutzer suchen..." value={userSearch} onChange={e => setUserSearch(e.target.value)} className="pl-9" />
+              </div>
+            </div>
+            {membersLoading ? (
+              <div className="text-center py-12 text-muted-foreground">Benutzer werden geladen...</div>
+            ) : (
+              <Card className="border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Benutzer</TableHead>
+                      <TableHead>E-Mail</TableHead>
+                      <TableHead>Rollen</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-center">Admin</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredUsers.map((user, i) => {
+                      const isAdmin = user.roles?.includes('org_admin');
+                      return (
+                        <TableRow key={user.id} className={i % 2 === 1 ? 'bg-muted/50' : ''}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Avatar className="h-8 w-8">
+                                <AvatarFallback className="bg-primary-lightest text-primary text-xs">{user.avatarInitials || `${(user.firstName?.[0] || '')}${(user.lastName?.[0] || '')}`}</AvatarFallback>
+                              </Avatar>
+                              <span className="font-medium">{user.firstName} {user.lastName}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">{user.email}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {(user.roles || []).map(r => (
+                                <Badge key={r} variant="outline" className={r === 'org_admin' ? 'bg-primary/10 text-primary border-primary/30' : ''}>{r === 'org_admin' ? 'Admin' : r === 'trainer' ? 'Trainer' : r === 'member' ? 'Mitglied' : r}</Badge>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={user.status === 'Aktiv' ? 'bg-success/10 text-success border-success/30' : 'bg-muted text-muted-foreground'}>{user.status}</Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Switch
+                              checked={isAdmin}
+                              onCheckedChange={() => handleToggleAdminRole(user.id, user.roles || [])}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {filteredUsers.length === 0 && (
+                      <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Keine Benutzer gefunden.</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </Card>
+            )}
+            <p className="text-xs text-muted-foreground mt-3">{allUsers.length} Benutzer insgesamt</p>
+          </TabsContent>
+
           {/* ALLGEMEIN */}
           <TabsContent value="general">
             <Card className="border border-border">
@@ -335,6 +465,39 @@ export default function Settings() {
             </div>
           </div>
           <DialogFooter><Button variant="ghost" onClick={() => setRoleEditorOpen(false)}>Abbrechen</Button><Button>Speichern</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* User Create Dialog */}
+      <Dialog open={userDialogOpen} onOpenChange={setUserDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Neuen Benutzer anlegen</DialogTitle></DialogHeader>
+          <form onSubmit={handleCreateUser} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-sm font-medium">Vorname *</label><Input name="firstName" required /></div>
+              <div><label className="text-sm font-medium">Nachname *</label><Input name="lastName" required /></div>
+            </div>
+            <div><label className="text-sm font-medium">E-Mail *</label><Input name="email" type="email" required /></div>
+            <div><label className="text-sm font-medium">Passwort *</label><Input name="password" type="password" required minLength={8} placeholder="Mind. 8 Zeichen" /></div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">Rollen zuweisen</label>
+              <div className="space-y-2">
+                {(apiRoles ?? []).map(role => (
+                  <div key={role.id} className="flex items-center gap-2">
+                    <Checkbox name={`role_${role.id}`} id={`newuser-role-${role.id}`} defaultChecked={role.name === 'member'} />
+                    <label htmlFor={`newuser-role-${role.id}`} className="text-sm">
+                      {role.name === 'org_admin' ? 'Admin' : role.name === 'member' ? 'Mitglied' : role.name === 'trainer' ? 'Trainer' : role.name}
+                      {role.isSystem && <span className="text-muted-foreground ml-1">(System)</span>}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setUserDialogOpen(false)}>Abbrechen</Button>
+              <Button type="submit" disabled={createMember.isPending}>{createMember.isPending ? 'Erstelle...' : 'Benutzer erstellen'}</Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 

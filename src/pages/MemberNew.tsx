@@ -9,19 +9,43 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { availableRoles, availableGroups, customFieldDefinitions } from '@/data/mockData';
+import { useCreateMember } from '@/hooks/use-api';
 import { Calendar as CalIcon, Upload } from 'lucide-react';
 
 export default function MemberNew() {
   const navigate = useNavigate();
   const [dsgvo, setDsgvo] = useState(false);
   const [dynamicFields, setDynamicFields] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const createMember = useCreateMember();
 
   const updateDynamic = (key: string, value: string) =>
     setDynamicFields((f) => ({ ...f, [key]: value }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate('/members');
+    setFormError(null);
+    const form = e.target as HTMLFormElement;
+    const fd = new FormData(form);
+    try {
+      await createMember.mutateAsync({
+        firstName: fd.get('firstName') as string,
+        lastName: fd.get('lastName') as string,
+        email: fd.get('email') as string,
+        phone: fd.get('phone') as string || '',
+        mobile: fd.get('mobile') as string || '',
+        birthDate: fd.get('birthDate') as string || '',
+        gender: fd.get('gender') as string || '',
+        street: fd.get('street') as string || '',
+        zip: fd.get('zip') as string || '',
+        city: fd.get('city') as string || '',
+        status: (fd.get('status') as string || 'active') as 'Aktiv',
+        customFields: dynamicFields,
+      });
+      navigate('/members');
+    } catch (err: any) {
+      setFormError(err.message || 'Fehler beim Erstellen');
+    }
   };
 
   return (
@@ -37,22 +61,22 @@ export default function MemberNew() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Vorname *</Label>
-                  <Input placeholder="Vorname" required />
+                  <Input name="firstName" placeholder="Vorname" required />
                 </div>
                 <div className="space-y-2">
                   <Label>Nachname *</Label>
-                  <Input placeholder="Nachname" required />
+                  <Input name="lastName" placeholder="Nachname" required />
                 </div>
                 <div className="space-y-2">
                   <Label>Geburtsdatum</Label>
                   <div className="relative">
-                    <Input placeholder="TT.MM.JJJJ" />
+                    <Input name="birthDate" placeholder="TT.MM.JJJJ" />
                     <CalIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Geschlecht</Label>
-                  <Select>
+                  <Select name="gender">
                     <SelectTrigger><SelectValue placeholder="Bitte wählen" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="männlich">Männlich</SelectItem>
@@ -80,28 +104,28 @@ export default function MemberNew() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>E-Mail *</Label>
-                  <Input type="email" placeholder="name@example.de" required />
+                  <Input name="email" type="email" placeholder="name@example.de" required />
                 </div>
                 <div className="space-y-2">
                   <Label>Telefon</Label>
-                  <Input placeholder="z.B. 089 123456" />
+                  <Input name="phone" placeholder="z.B. 089 123456" />
                 </div>
                 <div className="space-y-2">
                   <Label>Mobiltelefon</Label>
-                  <Input placeholder="z.B. 0171 1234567" />
+                  <Input name="mobile" placeholder="z.B. 0171 1234567" />
                 </div>
                 <div className="space-y-2" />
                 <div className="space-y-2 md:col-span-2">
                   <Label>Straße</Label>
-                  <Input placeholder="Straße und Hausnummer" />
+                  <Input name="street" placeholder="Straße und Hausnummer" />
                 </div>
                 <div className="space-y-2">
                   <Label>PLZ</Label>
-                  <Input placeholder="z.B. 80331" />
+                  <Input name="zip" placeholder="z.B. 80331" />
                 </div>
                 <div className="space-y-2">
                   <Label>Ort</Label>
-                  <Input placeholder="z.B. München" />
+                  <Input name="city" placeholder="z.B. München" />
                 </div>
               </div>
             </div>
@@ -193,9 +217,14 @@ export default function MemberNew() {
             </div>
 
             {/* Footer */}
+            {formError && (
+              <div className="bg-destructive/10 text-destructive text-sm rounded-md p-3">{formError}</div>
+            )}
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="ghost" onClick={() => navigate('/members')}>Abbrechen</Button>
-              <Button type="submit" disabled={!dsgvo}>Mitglied anlegen</Button>
+              <Button type="submit" disabled={!dsgvo || createMember.isPending}>
+                {createMember.isPending ? 'Wird angelegt...' : 'Mitglied anlegen'}
+              </Button>
             </div>
           </CardContent>
         </Card>

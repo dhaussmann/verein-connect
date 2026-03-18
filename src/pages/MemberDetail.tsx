@@ -20,10 +20,11 @@ import {
   Download, Link as LinkIcon, Calendar as CalIcon,
 } from 'lucide-react';
 import {
-  members, customFieldDefinitions, availableRoles,
+  customFieldDefinitions, availableRoles,
   getMemberRoleAssignments, getMemberCourses, getMemberAttendance,
   getMemberInvoices, getMemberFamily,
 } from '@/data/mockData';
+import { useMember, useUpdateMember } from '@/hooks/use-api';
 
 const statusClass = (s: string) =>
   s === 'Aktiv' ? 'bg-success/10 text-success' : s === 'Inaktiv' ? 'bg-muted text-muted-foreground' : 'bg-warning/10 text-warning';
@@ -40,12 +41,21 @@ const invoiceStatusClass = (s: string) =>
 export default function MemberDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const member = members.find((m) => m.id === id);
+  const { data: member, isLoading, error } = useMember(id);
   const [editing, setEditing] = useState(false);
   const [roleModalOpen, setRoleModalOpen] = useState(false);
   const [newRole, setNewRole] = useState('');
 
-  if (!member) {
+  if (isLoading) {
+    return (
+      <div>
+        <PageHeader title="" />
+        <p className="text-muted-foreground">Mitglied wird geladen...</p>
+      </div>
+    );
+  }
+
+  if (error || !member) {
     return (
       <div>
         <PageHeader title="Mitglied nicht gefunden" />

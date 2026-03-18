@@ -1,21 +1,25 @@
+import { useMemo } from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, GraduationCap, Calendar, Receipt, TrendingUp } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { upcomingEvents, recentActivities, memberGrowthData } from '@/data/mockData';
 import { Badge } from '@/components/ui/badge';
-
-const kpis = [
-  { label: 'Aktive Mitglieder', value: '247', sub: '+12 diesen Monat', icon: Users, trend: true, highlight: true },
-  { label: 'Offene Kurse', value: '18', sub: '3 diese Woche', icon: GraduationCap },
-  { label: 'Nächster Termin', value: 'Heute 18:00', sub: 'A-Jugend Training', icon: Calendar },
-  { label: 'Offene Rechnungen', value: '2.450 €', sub: '14 ausstehend', icon: Receipt, warning: true },
-];
+import { useMembers } from '@/hooks/use-api';
 
 const eventStatusClass = (s: string) =>
   s === 'Offen' ? 'bg-success/10 text-success' : s === 'Voll' ? 'bg-primary-lightest text-primary' : 'bg-destructive/10 text-destructive';
 
 export default function Dashboard() {
+  const { data: membersData } = useMembers({ per_page: '1' });
+  const totalMembers = membersData?.meta?.total ?? null;
+
+  const kpis = useMemo(() => [
+    { label: 'Aktive Mitglieder', value: totalMembers !== null ? String(totalMembers) : '–', sub: 'Aus der Datenbank', icon: Users, trend: true, highlight: true },
+    { label: 'Offene Kurse', value: '18', sub: '3 diese Woche', icon: GraduationCap },
+    { label: 'Nächster Termin', value: 'Heute 18:00', sub: 'A-Jugend Training', icon: Calendar },
+    { label: 'Offene Rechnungen', value: '2.450 €', sub: '14 ausstehend', icon: Receipt, warning: true },
+  ], [totalMembers]);
   return (
     <div>
       <PageHeader title="Dashboard" />
