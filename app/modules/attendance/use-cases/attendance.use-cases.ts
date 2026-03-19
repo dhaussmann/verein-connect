@@ -1,0 +1,151 @@
+import { and, count, eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
+import type { RouteEnv } from "@/core/runtime/route";
+import { attendance, eventOccurrences, eventRegistrations, events, users } from "@/core/db/schema";
+
+export async function listTodayAttendanceEventsUseCase(env: RouteEnv, orgId: string, today: string) {
+  const db = drizzle(env.DB);
+  const rows = await db
+    .select({
+      id: eventOccurrences.id,
+      eventId: eventOccurrences.eventId,
+      title: events.title,
+      location: events.location,
+      overrideLocation: eventOccurrences.overrideLocation,
+      maxParticipants: events.maxParticipants,
+      timeStart: events.timeStart,
+      timeEnd: events.timeEnd,
+    })
+    .from(eventOccurrences)
+    .innerJoin(events, eq(eventOccurrences.eventId, events.id))
+    .where(and(eq(events.orgId, orgId), eq(eventOccurrences.startDate, today)));
+
+  const data = await Promise.all(rows.map(async (row) => {
+    const [registeredRows, checkedInRows] = await Promise.all([
+      db
+        .select({ count: count() })
+        .from(eventRegistrations)
+        .where(and(eq(eventRegistrations.eventId, row.eventId), eq(eventRegistrations.status, "registered"))),
+      db
+        .select({ count: count() })
+        .from(attendance)
+        .where(and(eq(attendance.occurrenceId, row.id), eq(attendance.status, "present"))),
+    ]);
+
+    const totalParticipants = registeredRows[0]?.count || 0;
+    const checkedIn = checkedInRows[0]?.count || 0;
+
+    return {
+      id: row.id,
+      title: row.title,
+      timeStart: row.timeStart || "",
+      timeEnd: row.timeEnd || "",
+      location: row.overrideLocation || row.location || "",
+      status: checkedIn > 0 && checkedIn < totalParticipants ? "Aktiv" : checkedIn >= totalParticipants && totalParticipants > 0 ? "Abgeschlossen" : "Offen",
+      participants: checkedIn,
+      maxParticipants: totalParticipants || row.maxParticipants || 0,
+    };
+  }));
+
+  return { data };
+}
+
+export async function getAttendanceOccurrenceUseCase(env: RouteEnv, input: { orgId: string; occurrenceId: string }) {
+  const db = drizzle(env.DB);
+  const occurrenceRows = await db
+    .select({
+      id: eventOccurrences.id,
+      eventId: eventOccurrences.eventId,
+      title: events.title,
+      location: events.location,
+      overrideLocation: eventOccurrences.overrideLocation,
+      timeStart: events.timeStart,
+      timeEnd: events.timeEnd,
+    })
+    .from(eventOccurrences)
+    .innerJoin(events, eq(eventOccurrences.eventId, events.id))
+    .where(and(eq(eventOccurrences.id, input.occurrenceId), eq(events.orgId, input.orgId)));
+  const occurrence = occurrenceRows[0];
+  if (!occurrence) return null;
+
+  const registered = await db
+    .select({
+      userId: eventRegistrations.userId,
+      firstName: users.firstName,
+      lastName: users.lastName,
+    })
+    .from(eventRegistrations)
+    .innerJoin(users, eq(eventRegistrations.userId, users.id))
+    .where(and(eq(eventRegistrations.eventId, occurrence.eventId), eq(eventRegistrations.status, "registered")));
+
+  const attendanceRows = await db
+    .select()
+    .from(attendance)
+    .where(eq(attendance.occurrenceId, input.occurrenceId));
+  const attendanceMap = new Map(attendanceRows.map((row) => [row.userId, row]));
+
+  return {
+    event: {
+      title: occurrence.title,
+      timeStart: occurrence.timeStart || "",
+      timeEnd: occurrence.timeEnd || "",
+      location: occurrence.overrideLocation || occurrence.location || "",
+    },
+    attendanceData: registered.map((participant) => {
+      const record = attendanceMap.get(participant.userId);
+      return {
+        id: record?.id || participant.userId,
+        userId: participant.userId,
+        memberId: participant.userId,
+        memberName: `${participant.firstName} ${participant.lastName}`,
+        status: record?.status || "pending",
+        checkedInAt: record?.checkedInAt || undefined,
+      };
+    }),
+  };
+}
+
+export async function checkInAttendanceUseCase(
+  env: RouteEnv,
+  input: {
+    orgId: string;
+    actorUserId: string;
+    occurrenceId: string;
+    userId: string;
+    status: string;
+    method?: string;
+  },
+) {
+  const db = drizzle(env.DB);
+  const occurrence = await db
+    .select({ id: eventOccurrences.id })
+    .from(eventOccurrences)
+    .innerJoin(events, eq(eventOccurrences.eventId, events.id))
+    .where(and(eq(eventOccurrences.id, input.occurrenceId), eq(events.orgId, input.orgId)));
+  if (!occurrence[0]) {
+    throw new Error("Termin nicht gefunden");
+  }
+
+  const existing = await db
+    .select()
+    .from(attendance)
+    .where(and(eq(attendance.occurrenceId, input.occurrenceId), eq(attendance.userId, input.userId)));
+
+  const values = {
+    status: input.status,
+    checkedInAt: input.status === "present" ? new Date().toISOString() : null,
+    checkedInBy: input.actorUserId,
+    checkInMethod: input.method || "manual",
+  };
+
+  if (existing[0]) {
+    await db.update(attendance).set(values).where(eq(attendance.id, existing[0].id));
+    return;
+  }
+
+  await db.insert(attendance).values({
+    occurrenceId: input.occurrenceId,
+    userId: input.userId,
+    ...values,
+  });
+}

@@ -1,0 +1,30 @@
+name = "verein-connect"
+main = "worker.ts"
+account_id = "c587da19f5337da66a0e6424a478d80e"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "./build/client"
+
+# D1 Datenbank
+[[d1_databases]]
+binding = "DB"
+database_name = "verein-connect-db"
+database_id = "2834016d-07c0-4b0b-b4cb-6a5de33e226e"
+
+# R2 Bucket für Dateien
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "verein-connect-files"
+
+# KV für Sessions/Cache
+[[kv_namespaces]]
+binding = "KV"
+id = "478b03cf31a8459ea777dee8e4dcfec3"
+
+[triggers]
+crons = ["0 8 * * 1", "0 2 * * *", "0 3 * * *", "0 0 1 * *"]
+
+[vars]
+FRONTEND_URL = "https://verein-connect.pages.dev"

@@ -1,0 +1,188 @@
+import { useMemo, useState } from "react";
+import { Form, useActionData, useLoaderData, useNavigation, useNavigate } from "react-router";
+import {
+  Button, ActionIcon, Card, Text, Group, Stack, Badge,
+  TextInput, Select, Modal, Table,
+} from "@mantine/core";
+import { ArrowLeft, Plus, Trash2, Users, Search } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
+import type { GroupDetailLoaderData, GroupRouteActionData } from "../types/group.types";
+
+const categoryLabel: Record<string, string> = {
+  standard: "Standard",
+  team: "Team / Mannschaft",
+};
+
+export default function GroupDetailRoute() {
+  const navigate = useNavigate();
+  const { group, groupMembers, availableMembers } = useLoaderData<GroupDetailLoaderData>();
+  const actionData = useActionData<GroupRouteActionData>();
+  const navigation = useNavigation();
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [memberSearch, setMemberSearch] = useState("");
+
+  const filteredAvailableMembers = useMemo(() => {
+    if (!memberSearch.trim()) return availableMembers;
+    const query = memberSearch.toLowerCase();
+    return availableMembers.filter((member) =>
+      `${member.firstName} ${member.lastName}`.toLowerCase().includes(query)
+      || member.email.toLowerCase().includes(query),
+    );
+  }, [availableMembers, memberSearch]);
+
+  if (!group) {
+    return (
+      <div>
+        <PageHeader title="Gruppe nicht gefunden" />
+        <Button variant="outline" onClick={() => navigate("/groups")} leftSection={<ArrowLeft size={16} />}>
+          Zurück
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <PageHeader
+        title={group.name}
+        action={
+          <Button variant="outline" size="sm" onClick={() => navigate("/groups")} leftSection={<ArrowLeft size={16} />}>
+            Zurück
+          </Button>
+        }
+      />
+
+      {actionData?.error && (
+        <Text c="red" size="sm" mb="sm">
+          {actionData.error}
+        </Text>
+      )}
+      {actionData?.success && (
+        <Text c="green" size="sm" mb="sm">
+          Gruppe aktualisiert.
+        </Text>
+      )}
+
+      <Group gap="sm" mb="lg">
+        <Badge color={group.category === "team" ? "blue" : "gray"}>
+          {categoryLabel[group.category || "standard"] || group.category}
+        </Badge>
+        {group.description && (
+          <Text size="sm" c="dimmed">{group.description}</Text>
+        )}
+      </Group>
+
+      <Card shadow="sm" p="md">
+        <Group justify="space-between" mb="sm">
+          <Group gap="xs">
+            <Users size={16} />
+            <Text fw={600} size="sm">Mitglieder ({groupMembers.length})</Text>
+          </Group>
+          <Button
+            size="sm"
+            leftSection={<Plus size={16} />}
+            onClick={() => {
+              setAddDialogOpen(true);
+              setMemberSearch("");
+              setSelectedUserId("");
+            }}
+          >
+            Mitglied hinzufügen
+          </Button>
+        </Group>
+
+        {groupMembers.length === 0 ? (
+          <Stack align="center" py="xl">
+            <Users size={48} style={{ opacity: 0.4 }} />
+            <Text c="dimmed">Noch keine Mitglieder in dieser Gruppe.</Text>
+            <Button
+              size="sm"
+              leftSection={<Plus size={16} />}
+              onClick={() => {
+                setAddDialogOpen(true);
+                setMemberSearch("");
+                setSelectedUserId("");
+              }}
+            >
+              Erstes Mitglied hinzufügen
+            </Button>
+          </Stack>
+        ) : (
+          <Table highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Name</Table.Th>
+                <Table.Th>E-Mail</Table.Th>
+                <Table.Th>Beigetreten</Table.Th>
+                <Table.Th w={40} />
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {groupMembers.map((member) => (
+                <Table.Tr
+                  key={member.id}
+                  style={{ cursor: "pointer" }}
+                  onClick={() => navigate(`/members/${member.userId}`)}
+                >
+                  <Table.Td fw={500}>{member.firstName} {member.lastName}</Table.Td>
+                  <Table.Td c="dimmed">{member.email}</Table.Td>
+                  <Table.Td c="dimmed">
+                    {member.joinedAt ? new Date(member.joinedAt).toLocaleDateString("de-DE") : "–"}
+                  </Table.Td>
+                  <Table.Td onClick={(event) => event.stopPropagation()}>
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="remove-member" />
+                      <input type="hidden" name="userId" value={member.userId} />
+                      <ActionIcon variant="subtle" color="red" size="sm" type="submit">
+                        <Trash2 size={16} />
+                      </ActionIcon>
+                    </Form>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        )}
+      </Card>
+
+      <Modal opened={addDialogOpen} onClose={() => setAddDialogOpen(false)} title={`Mitglied zu "${group.name}" hinzufügen`} size="md">
+        <Form method="post">
+          <input type="hidden" name="intent" value="add-member" />
+          <Stack gap="md">
+            <TextInput
+              label="Mitglied suchen"
+              placeholder="Name oder E-Mail..."
+              value={memberSearch}
+              onChange={(event) => setMemberSearch(event.target.value)}
+              leftSection={<Search size={16} />}
+            />
+            <Select
+              label="Mitglied auswählen"
+              name="userId"
+              value={selectedUserId}
+              onChange={(value) => setSelectedUserId(value ?? "")}
+              placeholder="Mitglied wählen..."
+              data={
+                filteredAvailableMembers.length === 0
+                  ? []
+                  : filteredAvailableMembers.map((member) => ({
+                      value: member.id,
+                      label: `${member.firstName} ${member.lastName} — ${member.email}`,
+                    }))
+              }
+              nothingFoundMessage="Keine verfügbaren Mitglieder gefunden"
+              searchable
+            />
+          </Stack>
+          <Group justify="flex-end" mt="md">
+            <Button variant="outline" onClick={() => setAddDialogOpen(false)} type="button">Abbrechen</Button>
+            <Button type="submit" disabled={!selectedUserId || navigation.state === "submitting"}>
+              {navigation.state === "submitting" ? "Wird hinzugefügt..." : "Hinzufügen"}
+            </Button>
+          </Group>
+        </Form>
+      </Modal>
+    </div>
+  );
+}
