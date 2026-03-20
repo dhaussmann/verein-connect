@@ -3,18 +3,8 @@ import { and, eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import type { Env } from "../types/bindings";
 import { organizations, roles, userRoles, users } from "../db/schema";
-import { generateSlug } from "../lib/slug";
 import { AppError, UnauthorizedError } from "../lib/errors";
 import type { SessionUser } from "@/core/types/auth";
-
-const SYSTEM_ROLES = [
-  { name: "org_admin", description: "Vollzugriff auf alle Bereiche", category: "system", permissions: ["*"] },
-  { name: "member_admin", description: "Mitglieder- und Rollenverwaltung", category: "system", permissions: ["members.*", "roles.*"] },
-  { name: "event_admin", description: "Kurs- und Terminverwaltung", category: "system", permissions: ["events.*", "courses.*"] },
-  { name: "finance_admin", description: "Rechnungen und Buchhaltung", category: "system", permissions: ["invoices.*", "payments.*", "accounting.*"] },
-  { name: "trainer", description: "Anwesenheit erfassen, Kurse einsehen", category: "system", permissions: ["events.read", "attendance.write", "members.read"] },
-  { name: "member", description: "Basis-Mitgliedsrechte", category: "system", permissions: ["profile.own", "events.register", "events.read", "courses.read"] },
-];
 
 function getFrontendRole(roleNames: string[]) {
   if (roleNames.includes("org_admin")) return "admin";
@@ -65,7 +55,6 @@ export async function getSessionUserById(env: Pick<Env, "DB">, userId: string): 
           id: org.id,
           name: org.name,
           slug: org.slug,
-          plan: org.plan || "free",
         }
       : null,
   };
@@ -73,19 +62,11 @@ export async function getSessionUserById(env: Pick<Env, "DB">, userId: string): 
 
 export async function loginWithPassword(
   env: Pick<Env, "DB">,
-  input: { email: string; password: string; org_slug?: string },
+  input: { email: string; password: string },
 ): Promise<SessionUser> {
   const db = drizzle(env.DB);
   const userRows = await db.select().from(users).where(eq(users.email, input.email));
-
-  let user = userRows[0];
-  if (input.org_slug && userRows.length > 1) {
-    const orgRows = await db.select().from(organizations).where(eq(organizations.slug, input.org_slug));
-    const org = orgRows[0];
-    if (org) {
-      user = userRows.find((candidate) => candidate.orgId === org.id) || user;
-    }
-  }
+  const user = userRows[0];
 
   if (!user) throw new UnauthorizedError("Ungültige Anmeldedaten");
   if (!user.passwordHash) throw new UnauthorizedError("Kein Passwort gesetzt. Bitte Passwort zurücksetzen.");
@@ -97,80 +78,6 @@ export async function loginWithPassword(
   await db.update(users).set({ lastLogin: new Date().toISOString() }).where(eq(users.id, user.id));
   const sessionUser = await getSessionUserById(env, user.id);
   if (!sessionUser) throw new UnauthorizedError("Benutzer konnte nicht geladen werden");
-  return sessionUser;
-}
-
-export async function registerOrganizationWithAdmin(
-  env: Pick<Env, "DB">,
-  input: {
-    org_name: string;
-    org_type?: string;
-    first_name: string;
-    last_name: string;
-    email: string;
-    password: string;
-  },
-): Promise<SessionUser> {
-  const db = drizzle(env.DB);
-  const slug = generateSlug(input.org_name);
-
-  const existingOrg = await db.select({ id: organizations.id }).from(organizations).where(eq(organizations.slug, slug));
-  if (existingOrg.length > 0) throw new AppError(409, "Ein Verein mit diesem Namen existiert bereits");
-
-  const orgId = crypto.randomUUID();
-  const userId = crypto.randomUUID();
-  const passwordHash = await bcrypt.hash(input.password, 12);
-  const memberNumber = `M-${new Date().getFullYear()}-001`;
-
-  await db.insert(organizations).values({
-    id: orgId,
-    name: input.org_name,
-    slug,
-    settings: JSON.stringify({ type: input.org_type || "sport", language: "de", timezone: "Europe/Berlin" }),
-    plan: "free",
-  });
-
-  await db.insert(users).values({
-    id: userId,
-    orgId,
-    email: input.email,
-    passwordHash,
-    firstName: input.first_name,
-    lastName: input.last_name,
-    displayName: `${input.first_name} ${input.last_name}`,
-    status: "active",
-    memberNumber,
-  });
-
-  const roleIds: Record<string, string> = {};
-  for (const roleDef of SYSTEM_ROLES) {
-    const roleId = crypto.randomUUID();
-    roleIds[roleDef.name] = roleId;
-    await db.insert(roles).values({
-      id: roleId,
-      orgId,
-      name: roleDef.name,
-      description: roleDef.description,
-      category: roleDef.category,
-      isSystem: 1,
-      permissions: JSON.stringify(roleDef.permissions),
-    });
-  }
-
-  await db.insert(userRoles).values({
-    userId,
-    roleId: roleIds.org_admin,
-    status: "active",
-  });
-
-  await db.insert(userRoles).values({
-    userId,
-    roleId: roleIds.member,
-    status: "active",
-  });
-
-  const sessionUser = await getSessionUserById(env, userId);
-  if (!sessionUser) throw new AppError(500, "Benutzer konnte nach Registrierung nicht geladen werden");
   return sessionUser;
 }
 

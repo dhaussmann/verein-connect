@@ -6,9 +6,11 @@ export default [
 
   // Auth routes (no layout)
   route("login", "routes/auth/login.tsx"),
-  route("register", "routes/auth/register.tsx"),
+  route("reset-password", "routes/auth/reset-password.tsx"),
+  route("join/:slug", "routes/public/join.$slug.tsx"),
   route("forgot-password", "routes/auth/forgot-password.tsx"),
   route("logout", "routes/auth/logout.tsx"),
+  route("api/auth/*", "routes/api.auth.$.ts"),
   route("system/run-cron", "routes/system/run-cron.ts"),
 
   // Protected layout routes
@@ -65,7 +67,6 @@ export default [
       route("notifications", "routes/settings/notifications.tsx"),
       route("integrations", "routes/settings/integrations.tsx"),
       route("gdpr", "routes/settings/gdpr.tsx"),
-      route("membership-levels", "routes/settings/membership-levels.tsx"),
     ]),
 
     // Member portal

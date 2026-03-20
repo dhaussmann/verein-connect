@@ -4,14 +4,21 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 import { Button, Card, TextInput, Text, Anchor } from "@mantine/core";
 import { Eye, EyeOff } from "lucide-react";
-import { getSessionTokens, commitSessionTokens, getEnv } from "@/lib/session.server";
+import { getAuthenticatedHomePath, requireAnonymous } from "@/lib/auth.server";
+import { getSessionUserById } from "@/core/auth/auth.service";
+import { sendBetterAuthRequest } from "@/lib/better-auth.server";
+import { getEnv } from "@/lib/session.server";
 import { loginFormSchema } from "@/core/schemas/auth";
-import { loginWithPassword } from "@/core/auth/auth.service";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const env = getEnv(context as Parameters<typeof getEnv>[0]);
-  const { user } = await getSessionTokens(request, env.COOKIE_SECRET);
-  if (user) return redirect("/");
+  const anonymousState = await requireAnonymous(request, env);
+  if (anonymousState.clearedSession) {
+    return Response.json(null, {
+      headers: anonymousState.headers,
+    });
+  }
+
   return null;
 }
 
@@ -29,23 +36,38 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
   if (!env.DB) return { error: "DB-Binding fehlt. Bitte die App über Wrangler starten." };
 
-  let data;
-  try {
-    data = await loginWithPassword(env as Required<Pick<typeof env, "DB">>, { email, password });
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : "Login fehlgeschlagen" };
+  const authResponse = await sendBetterAuthRequest(request, env, "/sign-in/email", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email,
+      password,
+      rememberMe: true,
+    }),
+  });
+
+  if (!authResponse.ok) {
+    const errorData = await authResponse.json().catch(() => null) as { message?: string } | null;
+    return { error: errorData?.message ?? "Login fehlgeschlagen" };
   }
 
-  const cookieHeader = await commitSessionTokens(
-    request,
-    env.COOKIE_SECRET,
-    data,
+  const authData = await authResponse.json() as { user?: { id: string } };
+  const cookieHeader = authResponse.headers.get("set-cookie");
+  if (!authData.user?.id || !cookieHeader) {
+    return { error: "Session konnte nicht erstellt werden" };
+  }
+
+  const user = await getSessionUserById(
+    env as Required<Pick<typeof env, "DB">>,
+    authData.user.id,
   );
+  if (!user) {
+    return { error: "Benutzer konnte nicht geladen werden" };
+  }
 
-  const isAdmin =
-    data.roles?.includes("org_admin") || data.roles?.includes("trainer");
-
-  return redirect(isAdmin ? "/dashboard" : "/portal", {
+  return redirect(getAuthenticatedHomePath(user), {
     headers: { "Set-Cookie": cookieHeader },
   });
 }
@@ -62,7 +84,7 @@ export default function Login() {
             <span className="text-primary-foreground font-bold text-lg">CB</span>
           </div>
           <Text size="xl" fw={600}>Willkommen zurück</Text>
-          <Text size="sm" c="dimmed">Melde dich bei deinem Verein an</Text>
+          <Text size="sm" c="dimmed">Melde dich im Vereinsportal an</Text>
         </div>
         <Form method="post">
           <TextInput
@@ -101,8 +123,7 @@ export default function Login() {
           </Button>
         </Form>
         <Text size="sm" ta="center" mt="md" c="dimmed">
-          Noch kein Konto?{" "}
-          <Anchor component={Link} to="/register" fw={500}>Verein registrieren</Anchor>
+          Zugänge werden intern durch die Vereinsverwaltung angelegt.
         </Text>
       </Card>
     </div>

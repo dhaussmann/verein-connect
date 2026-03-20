@@ -6,6 +6,7 @@ export interface Env {
   SYSTEM_API_KEY?: string;
   STRIPE_SECRET_KEY: string;
   RESEND_API_KEY: string;
+  BETTER_AUTH_SECRET: string;
 }
 
 export interface AuthUser {

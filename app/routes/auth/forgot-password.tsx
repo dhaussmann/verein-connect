@@ -3,9 +3,9 @@ import { Link, Form, useActionData } from "react-router";
 import type { ActionFunctionArgs } from "react-router";
 import { Button, Card, TextInput, Text, Anchor } from "@mantine/core";
 import { ArrowLeft, Mail } from "lucide-react";
+import { sendBetterAuthRequest } from "@/lib/better-auth.server";
 import { getEnv } from "@/lib/session.server";
 import { forgotPasswordFormSchema } from "@/core/schemas/auth";
-import { requestPasswordReset } from "@/core/auth/auth.service";
 
 export async function action({ request, context }: ActionFunctionArgs) {
   const env = getEnv(context as Parameters<typeof getEnv>[0]);
@@ -21,7 +21,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     };
   }
 
-  if (!env.DB || !env.KV || !env.FRONTEND_URL) {
+  if (!env.DB) {
     return {
       sent: false,
       error: "Bindings fehlen. Bitte die App über Wrangler starten.",
@@ -29,15 +29,16 @@ export async function action({ request, context }: ActionFunctionArgs) {
   }
 
   try {
-    await requestPasswordReset(
-      {
-        DB: env.DB,
-        KV: env.KV,
-        FRONTEND_URL: env.FRONTEND_URL,
-        RESEND_API_KEY: env.RESEND_API_KEY,
+    await sendBetterAuthRequest(request, env, "/request-password-reset", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
       },
-      parsed.data.email,
-    );
+      body: new URLSearchParams({
+        email: parsed.data.email,
+        redirectTo: new URL("/reset-password", request.url).toString(),
+      }).toString(),
+    });
   } catch {
     // Always show success to not leak email existence
   }
