@@ -175,7 +175,7 @@ export async function registerOrganizationWithAdmin(
 }
 
 export async function requestPasswordReset(
-  env: Pick<Env, "DB" | "KV" | "FRONTEND_URL" | "RESEND_API_KEY">,
+  env: Pick<Env, "DB" | "KV" | "FRONTEND_URL"> & Partial<Pick<Env, "RESEND_API_KEY">>,
   email: string,
 ) {
   const db = drizzle(env.DB);

@@ -47,6 +47,7 @@ export async function listApplicationsUseCase(env: RouteEnv, input: { orgId: str
     return {
       ...application,
       additionalData: JSON.parse(application.additionalData || "{}"),
+      status: application.status || "PENDING",
       typeName,
       reviewerName,
     };

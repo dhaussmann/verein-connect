@@ -86,7 +86,7 @@ export async function getMemberDetailUseCase(env: RouteEnv, input: { orgId: stri
     contracts: mappedContracts,
     groups: groupsResult.groups,
     roles,
-    profileFields,
+    profileFields: profileFields.map((field) => ({ ...field, options: [] })),
     bankAccount,
   };
 }

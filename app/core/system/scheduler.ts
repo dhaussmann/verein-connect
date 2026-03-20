@@ -23,7 +23,7 @@ export function resolveScheduledCron(value: string): SupportedCron {
   throw new Error("Unbekannter Cron-Job");
 }
 
-export async function runScheduledJob(env: Env, cron: SupportedCron) {
+export async function runScheduledJob(env: Pick<Env, "DB">, cron: SupportedCron) {
   if (cron === SCHEDULED_JOBS.weekly_overdue) {
     const today = new Date().toISOString().slice(0, 10);
     await env.DB.prepare(
@@ -91,6 +91,6 @@ export async function runScheduledJob(env: Env, cron: SupportedCron) {
   throw new Error("Cron-Job wird nicht unterstützt");
 }
 
-export async function scheduledHandler(event: ScheduledEvent, env: Env) {
+export async function scheduledHandler(event: ScheduledEvent, env: Pick<Env, "DB">) {
   await runScheduledJob(env, resolveScheduledCron(event.cron));
 }

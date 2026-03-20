@@ -108,7 +108,7 @@ export async function listMembersUseCase(
     filtered = filtered.filter((member) => member.status === filters.status);
   }
   if (filters.role && filters.role !== "Alle") {
-    filtered = filtered.filter((member) => member.roles.includes(filters.role));
+    filtered = filtered.filter((member) => filters.role ? member.roles.includes(filters.role) : true);
   }
   if (filters.group && filters.group !== "Alle") {
     filtered = filtered.filter((member) => member.groups.some((group) => group.name === filters.group));

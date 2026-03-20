@@ -57,13 +57,13 @@ export async function getInvoicesDataUseCase(
       description: invoice.notes || invoiceItems.map((item) => item.description).join(", "),
       positions: invoiceItems.map((item) => ({
         description: item.description,
-        quantity: item.quantity,
+        quantity: item.quantity ?? 1,
         unitPrice: `€${Number(item.unitPrice || 0).toFixed(2).replace(".", ",")}`,
         total: `€${Number(item.total || 0).toFixed(2).replace(".", ",")}`,
       })),
       timeline: [
         { step: "Entwurf", date: invoice.createdAt || undefined },
-        { step: "Gesendet", date: invoice.sentAt || undefined },
+        { step: "Fällig", date: invoice.dueDate || undefined },
         { step: "Bezahlt", date: invoice.paidAt || undefined },
       ],
     };

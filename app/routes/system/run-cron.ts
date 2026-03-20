@@ -2,11 +2,16 @@ import { data } from "react-router";
 import type { ActionFunctionArgs } from "react-router";
 import { getEnv } from "@/lib/session";
 import { resolveScheduledCron, runScheduledJob } from "@/core/system/scheduler";
+import type { Env } from "@/core/types/bindings";
 
 function readBearerToken(request: Request) {
   const authHeader = request.headers.get("authorization") || "";
   if (!authHeader.startsWith("Bearer ")) return null;
   return authHeader.slice("Bearer ".length).trim();
+}
+
+function isCronPayload(value: unknown): value is { job?: string; cron?: string } {
+  return !!value && typeof value === "object";
 }
 
 export async function action({ request, context }: ActionFunctionArgs) {
@@ -27,15 +32,15 @@ export async function action({ request, context }: ActionFunctionArgs) {
   let value = "";
   const contentType = request.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
-    const body = await request.json().catch(() => ({}));
-    value = String(body.job || body.cron || "");
+    const body: unknown = await request.json().catch(() => ({}));
+    value = isCronPayload(body) ? String(body.job || body.cron || "") : "";
   } else {
     const formData = await request.formData();
     value = String(formData.get("job") || formData.get("cron") || "");
   }
 
   const cron = resolveScheduledCron(value);
-  const result = await runScheduledJob(env, cron);
+  const result = await runScheduledJob(env as Pick<Env, "DB">, cron);
   return Response.json({ success: true, ...result });
 }
 
