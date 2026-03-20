@@ -5,7 +5,7 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist"] },
+  { ignores: ["dist", ".react-router", "build"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
@@ -21,6 +21,22 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-explicit-any": "error",
+    },
+  },
+  {
+    files: ["app/routes/**/*.tsx", "app/root.tsx", "app/routes/settings/layout.tsx"],
+    rules: {
+      "react-refresh/only-export-components": "off",
+    },
+  },
+  {
+    files: [
+      "app/components/contracts/MembershipTypeDialog.tsx",
+      "app/components/contracts/TarifDialog.tsx",
+    ],
+    rules: {
+      "react-refresh/only-export-components": "off",
     },
   },
 );

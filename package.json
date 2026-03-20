@@ -16,8 +16,9 @@
     "db:fix-demo-user:local": "wrangler d1 execute verein-connect-db --local --file=db/fix-demo-user.sql",
     "db:seed:local": "wrangler d1 execute verein-connect-db --local --file=db/seed.sql",
     "db:seed:remote": "wrangler d1 execute verein-connect-db --remote --file=db/seed.sql",
-    "lint": "eslint .",
-    "typecheck": "react-router typegen && tsc",
+    "lint": "react-router typegen && eslint .",
+    "typecheck": "react-router typegen && tsc --build",
+    "typecheck:full": "react-router typegen && tsc --build",
     "test": "vitest run",
     "test:watch": "vitest"
   },
