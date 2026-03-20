@@ -36,6 +36,7 @@ export default function MemberDetail() {
   const updateMember = useUpdateMember();
   const deleteMember = useDeleteMember();
   const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState<Record<string, string>>({});
   const [roleModalOpen, setRoleModalOpen] = useState(false);
   const [newRole, setNewRole] = useState('');
   const { data: contractsData } = useContracts(id ? { member_id: id } : undefined);
@@ -87,19 +88,56 @@ export default function MemberDetail() {
 
   const roleAssignments = member.roles.map((r: string) => ({ role: r, startDate: member.joinDate }));
 
-  const profileFields = [
-    { label: 'Vorname', value: member.firstName },
-    { label: 'Nachname', value: member.lastName },
-    { label: 'Geburtsdatum', value: member.birthDate },
-    { label: 'Geschlecht', value: member.gender },
-    { label: 'E-Mail', value: member.email },
-    { label: 'Telefon', value: member.phone || '–' },
-    { label: 'Mobil', value: member.mobile || '–' },
-    { label: 'Adresse', value: `${member.street}, ${member.zip} ${member.city}` },
-    ...customFieldDefs
-      .filter((cf: any) => member.customFields[cf.name])
-      .map((cf: any) => ({ label: cf.label, value: member.customFields[cf.name] === 'true' ? 'Ja' : member.customFields[cf.name] === 'false' ? 'Nein' : member.customFields[cf.name] })),
+  const editableFields = [
+    { key: 'firstName', label: 'Vorname', value: member.firstName },
+    { key: 'lastName', label: 'Nachname', value: member.lastName },
+    { key: 'birthDate', label: 'Geburtsdatum', value: member.birthDate },
+    { key: 'gender', label: 'Geschlecht', value: member.gender },
+    { key: 'email', label: 'E-Mail', value: member.email },
+    { key: 'phone', label: 'Telefon', value: member.phone || '' },
+    { key: 'mobile', label: 'Mobil', value: member.mobile || '' },
+    { key: 'street', label: 'Straße', value: member.street || '' },
+    { key: 'zip', label: 'PLZ', value: member.zip || '' },
+    { key: 'city', label: 'Ort', value: member.city || '' },
   ];
+
+  const customFieldEntries = customFieldDefs
+    .filter((cf: any) => member.customFields[cf.name])
+    .map((cf: any) => ({ key: `cf_${cf.name}`, label: cf.label, value: member.customFields[cf.name] === 'true' ? 'Ja' : member.customFields[cf.name] === 'false' ? 'Nein' : member.customFields[cf.name] }));
+
+  const profileFields = [
+    ...editableFields.map(f => ({ label: f.label, value: f.value || '–' })),
+    { label: 'Adresse', value: `${member.street || ''}, ${member.zip || ''} ${member.city || ''}` },
+    ...customFieldEntries.map(f => ({ label: f.label, value: f.value })),
+  ];
+
+  const startEditing = () => {
+    const form: Record<string, string> = {};
+    editableFields.forEach(f => { form[f.key] = f.value || ''; });
+    setEditForm(form);
+    setEditing(true);
+  };
+
+  const handleSave = async () => {
+    try {
+      await updateMember.mutateAsync({ id: id!, data: {
+        firstName: editForm.firstName,
+        lastName: editForm.lastName,
+        email: editForm.email,
+        phone: editForm.phone || undefined,
+        mobile: editForm.mobile || undefined,
+        birthDate: editForm.birthDate || undefined,
+        gender: editForm.gender || undefined,
+        street: editForm.street || undefined,
+        zip: editForm.zip || undefined,
+        city: editForm.city || undefined,
+      }});
+      toast.success('Änderungen gespeichert');
+      setEditing(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Speichern fehlgeschlagen');
+    }
+  };
 
   return (
     <div>
@@ -180,7 +218,7 @@ export default function MemberDetail() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={() => setEditing(!editing)}>
+              <Button variant="outline" size="sm" onClick={() => editing ? setEditing(false) : startEditing()}>
                 <Pencil className="h-4 w-4 mr-1" />{editing ? 'Abbrechen' : 'Bearbeiten'}
               </Button>
               <Button variant="outline" size="sm"><MessageSquare className="h-4 w-4 mr-1" />Nachricht</Button>
@@ -233,14 +271,14 @@ export default function MemberDetail() {
             <CardContent className="p-6">
               {editing ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {profileFields.map((f) => (
-                    <div key={f.label} className="space-y-1">
+                  {editableFields.map((f) => (
+                    <div key={f.key} className="space-y-1">
                       <Label className="text-xs text-muted-foreground">{f.label}</Label>
-                      <Input defaultValue={f.value} />
+                      <Input value={editForm[f.key] ?? ''} onChange={e => setEditForm(prev => ({ ...prev, [f.key]: e.target.value }))} />
                     </div>
                   ))}
                   <div className="md:col-span-2 flex gap-2 pt-2">
-                    <Button onClick={() => setEditing(false)}>Speichern</Button>
+                    <Button onClick={handleSave} disabled={updateMember.isPending}>{updateMember.isPending ? 'Speichern...' : 'Speichern'}</Button>
                     <Button variant="outline" onClick={() => setEditing(false)}>Abbrechen</Button>
                   </div>
                 </div>
