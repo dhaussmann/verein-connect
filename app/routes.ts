@@ -65,6 +65,7 @@ export default [
       route("notifications", "routes/settings/notifications.tsx"),
       route("integrations", "routes/settings/integrations.tsx"),
       route("gdpr", "routes/settings/gdpr.tsx"),
+      route("membership-levels", "routes/settings/membership-levels.tsx"),
     ]),
 
     // Member portal

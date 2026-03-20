@@ -32,6 +32,8 @@ export const users = sqliteTable('users', {
   street: text('street'),
   zip: text('zip'),
   city: text('city'),
+  joinDate: text('join_date'),
+  membershipLevelId: text('membership_level_id'),
   qrCode: text('qr_code').$defaultFn(() => crypto.randomUUID()),
   lastLogin: text('last_login'),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
@@ -41,6 +43,30 @@ export const users = sqliteTable('users', {
   index('idx_users_org').on(table.orgId),
   index('idx_users_status').on(table.orgId, table.status),
   index('idx_users_qr').on(table.qrCode),
+]));
+
+// ─── Membership Levels ──────────────────────────────────────────────────────
+export const membershipLevels = sqliteTable('membership_levels', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  orgId: text('org_id').notNull().references(() => organizations.id),
+  name: text('name').notNull(),
+  description: text('description'),
+  color: text('color').default('#3b82f6'),
+  sortOrder: integer('sort_order').default(0),
+  isDefault: integer('is_default').default(0),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+}, (table) => ([
+  uniqueIndex('idx_ml_org_name').on(table.orgId, table.name),
+]));
+
+export const userMembershipLevels = sqliteTable('user_membership_levels', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => users.id),
+  levelId: text('level_id').notNull().references(() => membershipLevels.id),
+  assignedAt: text('assigned_at').default(sql`(datetime('now'))`),
+}, (table) => ([
+  uniqueIndex('idx_uml_user_level').on(table.userId, table.levelId),
+  index('idx_uml_level').on(table.levelId),
 ]));
 
 // ─── Profile Field Definitions (EAV) ────────────────────────────────────────
@@ -55,6 +81,10 @@ export const profileFieldDefinitions = sqliteTable('profile_field_definitions', 
   isRequired: integer('is_required').default(0),
   isSearchable: integer('is_searchable').default(1),
   isVisibleRegistration: integer('is_visible_registration').default(0),
+  onRegistrationForm: integer('on_registration_form').default(0),
+  editableByMember: integer('editable_by_member').default(0),
+  visibleToMember: integer('visible_to_member').default(0),
+  adminOnly: integer('admin_only').default(0),
   sortOrder: integer('sort_order').default(0),
   gdprRetentionDays: integer('gdpr_retention_days'),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
@@ -117,8 +147,20 @@ export const families = sqliteTable('families', {
   name: text('name').notNull(),
   primaryContactId: text('primary_contact_id').references(() => users.id),
   discountPercent: real('discount_percent').default(0),
+  contractPartnerFirstName: text('contract_partner_first_name'),
+  contractPartnerLastName: text('contract_partner_last_name'),
+  contractPartnerEmail: text('contract_partner_email'),
+  contractPartnerPhone: text('contract_partner_phone'),
+  contractPartnerStreet: text('contract_partner_street'),
+  contractPartnerZip: text('contract_partner_zip'),
+  contractPartnerCity: text('contract_partner_city'),
+  contractPartnerBirthDate: text('contract_partner_birth_date'),
+  contractPartnerMemberId: text('contract_partner_member_id').references(() => users.id),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
-});
+  updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+}, (table) => ([
+  index('idx_families_org').on(table.orgId),
+]));
 
 export const familyMembers = sqliteTable('family_members', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -397,6 +439,8 @@ export const membershipTypes = sqliteTable('membership_types', {
   cancellationNoticeBasis: text('cancellation_notice_basis').default('FROM_CANCELLATION'),
   renewalCancellationDays: integer('renewal_cancellation_days'),
   defaultGroupId: text('default_group_id').references(() => groups.id),
+  isFamilyTarif: integer('is_family_tarif').default(0),
+  minFamilyMembers: integer('min_family_members').default(3),
   sortOrder: integer('sort_order').default(0),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
   updatedAt: text('updated_at').default(sql`(datetime('now'))`),
@@ -479,6 +523,7 @@ export const contracts = sqliteTable('contracts', {
   membershipTypeId: text('membership_type_id').references(() => membershipTypes.id),
   tarifId: text('tarif_id').references(() => tarifs.id),
   parentContractId: text('parent_contract_id'),
+  familyId: text('family_id').references(() => families.id),
   status: text('status').default('ACTIVE'),
   startDate: text('start_date').notNull(),
   endDate: text('end_date'),
@@ -574,4 +619,23 @@ export const bankAccounts = sqliteTable('bank_accounts', {
 }, (table) => ([
   uniqueIndex('idx_bank_user').on(table.userId),
   index('idx_bank_org').on(table.orgId),
+]));
+
+// ─── Guardians (Erziehungsberechtigte) ──────────────────────────────────────
+export const guardians = sqliteTable('guardians', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  orgId: text('org_id').notNull().references(() => organizations.id),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  firstName: text('first_name').notNull(),
+  lastName: text('last_name').notNull(),
+  street: text('street'),
+  zip: text('zip'),
+  city: text('city'),
+  phone: text('phone'),
+  email: text('email'),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+  updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+}, (table) => ([
+  index('idx_guardians_user').on(table.userId),
+  index('idx_guardians_org').on(table.orgId),
 ]));

@@ -20,6 +20,7 @@ import { upsertBankAccountUseCase, deleteBankAccountUseCase } from '@/modules/me
 import { getMemberDetailUseCase } from '@/modules/members/use-cases/get-member-detail.use-case';
 import { updateMemberUseCase } from '@/modules/members/use-cases/update-member.use-case';
 import { changeMemberStatusUseCase } from '@/modules/members/use-cases/change-member-status.use-case';
+import { listGuardiansUseCase, createGuardianUseCase, updateGuardianUseCase, deleteGuardianUseCase } from '@/modules/members/use-cases/guardian.use-case';
 import type { MemberProfileFieldOption } from '@/modules/members/types/member.types';
 
 const statusColor = (s: string) =>
@@ -29,7 +30,11 @@ export async function loader({ request, context, params }: LoaderFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
   const memberId = params.id;
   if (!memberId) throw new Error("Mitglied fehlt");
-  return getMemberDetailUseCase(env, { orgId: user.orgId, memberId });
+  const [detail, guardians] = await Promise.all([
+    getMemberDetailUseCase(env, { orgId: user.orgId, memberId }),
+    listGuardiansUseCase(env, { orgId: user.orgId, userId: memberId }),
+  ]);
+  return { ...detail, guardians };
 }
 
 export async function action({ request, context, params }: ActionFunctionArgs) {
@@ -90,6 +95,68 @@ export async function action({ request, context, params }: ActionFunctionArgs) {
       await deleteBankAccountUseCase(env, { orgId: user.orgId, actorUserId: user.id, memberId });
       return { success: true, intent };
     }
+    if (intent === "create-guardian") {
+      await createGuardianUseCase(env, {
+        orgId: user.orgId,
+        userId: memberId,
+        firstName: String(formData.get("firstName") || ""),
+        lastName: String(formData.get("lastName") || ""),
+        street: String(formData.get("street") || "") || null,
+        zip: String(formData.get("zip") || "") || null,
+        city: String(formData.get("city") || "") || null,
+        phone: String(formData.get("phone") || "") || null,
+        email: String(formData.get("email") || "") || null,
+      });
+      return { success: true, intent };
+    }
+    if (intent === "update-guardian") {
+      await updateGuardianUseCase(env, {
+        orgId: user.orgId,
+        guardianId: String(formData.get("guardianId") || ""),
+        firstName: String(formData.get("firstName") || ""),
+        lastName: String(formData.get("lastName") || ""),
+        street: String(formData.get("street") || "") || null,
+        zip: String(formData.get("zip") || "") || null,
+        city: String(formData.get("city") || "") || null,
+        phone: String(formData.get("phone") || "") || null,
+        email: String(formData.get("email") || "") || null,
+      });
+      return { success: true, intent };
+    }
+    if (intent === "delete-guardian") {
+      await deleteGuardianUseCase(env, {
+        orgId: user.orgId,
+        guardianId: String(formData.get("guardianId") || ""),
+      });
+      return { success: true, intent };
+    }
+    if (intent === "update-member") {
+      const profileFields: Record<string, string> = {};
+      for (const [key, val] of formData.entries()) {
+        if (key.startsWith("pf_")) {
+          profileFields[key.slice(3)] = String(val);
+        }
+      }
+      await updateMemberUseCase(env, {
+        orgId: user.orgId,
+        actorUserId: user.id,
+        memberId,
+        body: {
+          first_name: String(formData.get("first_name") || ""),
+          last_name: String(formData.get("last_name") || ""),
+          email: String(formData.get("email") || ""),
+          phone: String(formData.get("phone") || "") || undefined,
+          mobile: String(formData.get("mobile") || "") || undefined,
+          birth_date: String(formData.get("birth_date") || "") || undefined,
+          gender: String(formData.get("gender") || "") || undefined,
+          street: String(formData.get("street") || "") || undefined,
+          zip: String(formData.get("zip") || "") || undefined,
+          city: String(formData.get("city") || "") || undefined,
+          profile_fields: Object.keys(profileFields).length > 0 ? profileFields : undefined,
+        },
+      });
+      return { success: true, intent };
+    }
   } catch (error) {
     return { success: false, intent, error: error instanceof Error ? error.message : "Aktion fehlgeschlagen" };
   }
@@ -99,15 +166,19 @@ export async function action({ request, context, params }: ActionFunctionArgs) {
 
 export default function MemberDetail() {
   const navigate = useNavigate();
-  const { member, contracts, groups, roles, profileFields: profileFieldDefinitions, bankAccount } = useLoaderData<typeof loader>();
+  const { member, contracts, groups, roles, profileFields: profileFieldDefinitions, bankAccount, guardians } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState<Record<string, string>>({});
   const [roleModalOpen, setRoleModalOpen] = useState(false);
   const [newRole, setNewRole] = useState('');
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [bankEditing, setBankEditing] = useState(false);
   const [bankForm, setBankForm] = useState({ accountHolder: '', iban: '', bic: '', bankName: '', sepaMandate: false, sepaMandateDate: '', sepaMandateRef: '' });
+  const [guardianModalOpen, setGuardianModalOpen] = useState(false);
+  const [guardianEditing, setGuardianEditing] = useState<string | null>(null);
+  const [guardianForm, setGuardianForm] = useState({ firstName: '', lastName: '', street: '', zip: '', city: '', phone: '', email: '' });
   const allRoles = roles;
   const customFieldDefs: MemberProfileFieldOption[] = profileFieldDefinitions;
 
@@ -137,6 +208,14 @@ export default function MemberDetail() {
     } else if (fetcher.data.intent === 'upsert-bank-account') {
       notifications.show({ color: 'green', message: 'Kontoverbindung gespeichert' });
       setBankEditing(false);
+    } else if (fetcher.data.intent === 'update-member') {
+      notifications.show({ color: 'green', message: 'Mitglied gespeichert' });
+      setEditing(false);
+    } else if (fetcher.data.intent === 'create-guardian' || fetcher.data.intent === 'update-guardian') {
+      notifications.show({ color: 'green', message: 'Erziehungsberechtigter gespeichert' });
+      setGuardianModalOpen(false);
+    } else if (fetcher.data.intent === 'delete-guardian') {
+      notifications.show({ color: 'green', message: 'Erziehungsberechtigter gelöscht' });
     }
   }, [fetcher.data, navigate]);
 
@@ -176,7 +255,23 @@ export default function MemberDetail() {
               </Group>
             </div>
             <Group gap="xs" wrap="wrap">
-              <Button variant="outline" size="sm" leftSection={<Pencil size={14} />} onClick={() => setEditing(!editing)}>
+              <Button variant="outline" size="sm" leftSection={<Pencil size={14} />} onClick={() => {
+                if (!editing) {
+                  setEditForm({
+                    first_name: member.firstName,
+                    last_name: member.lastName,
+                    email: member.email,
+                    phone: member.phone || '',
+                    mobile: member.mobile || '',
+                    birth_date: member.birthDate || '',
+                    gender: member.gender || '',
+                    street: member.street || '',
+                    zip: member.zip || '',
+                    city: member.city || '',
+                  });
+                }
+                setEditing(!editing);
+              }}>
                 {editing ? 'Abbrechen' : 'Bearbeiten'}
               </Button>
               <Button variant="outline" size="sm" leftSection={<MessageSquare size={14} />}>Nachricht</Button>
@@ -225,6 +320,7 @@ export default function MemberDetail() {
           <Tabs.Tab value="finanzen">Finanzen</Tabs.Tab>
           <Tabs.Tab value="kontoverbindung">Kontoverbindung</Tabs.Tab>
           <Tabs.Tab value="familie">Familie</Tabs.Tab>
+          <Tabs.Tab value="erziehungsberechtigte">Erziehungsberechtigte</Tabs.Tab>
         </Tabs.List>
 
         {/* Tab: Profil */}
@@ -233,11 +329,40 @@ export default function MemberDetail() {
             <Card.Section p="md">
               {editing ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {profileFieldRows.map((f) => (
-                    <TextInput key={f.label} label={f.label} defaultValue={f.value} />
+                  {[
+                    { label: 'Vorname', key: 'first_name' },
+                    { label: 'Nachname', key: 'last_name' },
+                    { label: 'E-Mail', key: 'email' },
+                    { label: 'Telefon', key: 'phone' },
+                    { label: 'Mobil', key: 'mobile' },
+                    { label: 'Geburtsdatum', key: 'birth_date' },
+                    { label: 'Geschlecht', key: 'gender' },
+                    { label: 'Straße', key: 'street' },
+                    { label: 'PLZ', key: 'zip' },
+                    { label: 'Stadt', key: 'city' },
+                  ].map((f) => (
+                    <TextInput
+                      key={f.key}
+                      label={f.label}
+                      value={editForm[f.key] ?? ''}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                    />
+                  ))}
+                  {customFieldDefs.map((cf) => (
+                    <TextInput
+                      key={cf.name}
+                      label={cf.label}
+                      value={editForm[`pf_${cf.name}`] ?? member.customFields[cf.name] ?? ''}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, [`pf_${cf.name}`]: e.target.value }))}
+                    />
                   ))}
                   <div className="md:col-span-2 flex gap-2 pt-2">
-                    <Button onClick={() => setEditing(false)}>Speichern</Button>
+                    <Button
+                      loading={fetcher.state !== 'idle'}
+                      onClick={() => fetcher.submit({ intent: 'update-member', ...editForm }, { method: 'post' })}
+                    >
+                      Speichern
+                    </Button>
                     <Button variant="outline" onClick={() => setEditing(false)}>Abbrechen</Button>
                   </div>
                 </div>
@@ -549,7 +674,98 @@ export default function MemberDetail() {
             </Card.Section>
           </Card>
         </Tabs.Panel>
+
+        {/* Tab: Erziehungsberechtigte */}
+        <Tabs.Panel value="erziehungsberechtigte">
+          <Card shadow="sm">
+            <Card.Section p="md">
+              <Group justify="space-between" mb="md">
+                <Text fw={600} size="sm">Erziehungsberechtigte</Text>
+                <Button size="xs" leftSection={<Plus size={14} />} onClick={() => {
+                  setGuardianEditing(null);
+                  setGuardianForm({ firstName: '', lastName: '', street: '', zip: '', city: '', phone: '', email: '' });
+                  setGuardianModalOpen(true);
+                }}>Hinzufügen</Button>
+              </Group>
+              {guardians.length === 0 ? (
+                <Text size="sm" c="dimmed">Keine Erziehungsberechtigten vorhanden.</Text>
+              ) : (
+                <Stack gap="sm">
+                  {guardians.map((g) => (
+                    <Card key={g.id} withBorder padding="sm">
+                      <Group justify="space-between">
+                        <div>
+                          <Text size="sm" fw={500}>{g.firstName} {g.lastName}</Text>
+                          {g.email && <Text size="xs" c="dimmed">{g.email}</Text>}
+                          {g.phone && <Text size="xs" c="dimmed">{g.phone}</Text>}
+                          {(g.street || g.city) && (
+                            <Text size="xs" c="dimmed">{[g.street, g.zip, g.city].filter(Boolean).join(', ')}</Text>
+                          )}
+                        </div>
+                        <Group gap="xs">
+                          <ActionIcon variant="subtle" onClick={() => {
+                            setGuardianEditing(g.id);
+                            setGuardianForm({
+                              firstName: g.firstName,
+                              lastName: g.lastName,
+                              street: g.street ?? '',
+                              zip: g.zip ?? '',
+                              city: g.city ?? '',
+                              phone: g.phone ?? '',
+                              email: g.email ?? '',
+                            });
+                            setGuardianModalOpen(true);
+                          }}><Pencil size={14} /></ActionIcon>
+                          <ActionIcon variant="subtle" color="red" onClick={() => {
+                            if (confirm('Erziehungsberechtigten löschen?')) {
+                              fetcher.submit({ intent: 'delete-guardian', guardianId: g.id }, { method: 'post' });
+                            }
+                          }}><Trash2 size={14} /></ActionIcon>
+                        </Group>
+                      </Group>
+                    </Card>
+                  ))}
+                </Stack>
+              )}
+            </Card.Section>
+          </Card>
+        </Tabs.Panel>
       </Tabs>
+
+      {/* Guardian modal */}
+      <Modal
+        opened={guardianModalOpen}
+        onClose={() => setGuardianModalOpen(false)}
+        title={guardianEditing ? 'Erziehungsberechtigten bearbeiten' : 'Erziehungsberechtigten hinzufügen'}
+      >
+        <Stack>
+          <div className="grid grid-cols-2 gap-4">
+            <TextInput label="Vorname *" value={guardianForm.firstName} onChange={(e) => setGuardianForm(f => ({ ...f, firstName: e.target.value }))} />
+            <TextInput label="Nachname *" value={guardianForm.lastName} onChange={(e) => setGuardianForm(f => ({ ...f, lastName: e.target.value }))} />
+            <TextInput label="E-Mail" value={guardianForm.email} onChange={(e) => setGuardianForm(f => ({ ...f, email: e.target.value }))} />
+            <TextInput label="Telefon" value={guardianForm.phone} onChange={(e) => setGuardianForm(f => ({ ...f, phone: e.target.value }))} />
+            <TextInput label="Straße" value={guardianForm.street} onChange={(e) => setGuardianForm(f => ({ ...f, street: e.target.value }))} />
+            <TextInput label="PLZ" value={guardianForm.zip} onChange={(e) => setGuardianForm(f => ({ ...f, zip: e.target.value }))} />
+            <TextInput label="Stadt" className="col-span-2" value={guardianForm.city} onChange={(e) => setGuardianForm(f => ({ ...f, city: e.target.value }))} />
+          </div>
+          <Group justify="flex-end">
+            <Button variant="outline" onClick={() => setGuardianModalOpen(false)}>Abbrechen</Button>
+            <Button
+              loading={fetcher.state !== 'idle'}
+              onClick={() => {
+                const data: Record<string, string> = {
+                  intent: guardianEditing ? 'update-guardian' : 'create-guardian',
+                  ...guardianForm,
+                };
+                if (guardianEditing) data.guardianId = guardianEditing;
+                fetcher.submit(data, { method: 'post' });
+              }}
+            >
+              Speichern
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       {/* Group assign modal */}
       <Modal opened={groupModalOpen} onClose={() => setGroupModalOpen(false)} title="Gruppe zuweisen" size="sm">
