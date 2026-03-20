@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/d1';
 import { eq, and, desc, gte, lte, count } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Env, AuthUser } from '../types/bindings';
-import { organizations, profileFieldDefinitions, auditLog, users, profileFieldValues, families, familyMembers, savedFilters, membershipLevels, userMembershipLevels } from '../db/schema';
+import { organizations, profileFieldDefinitions, auditLog, users, profileFieldValues, families, familyMembers, savedFilters, membershipLevels, userMembershipLevels, fileCategories } from '../db/schema';
 import { parsePagination, buildMeta } from '../lib/pagination';
 import { NotFoundError, ValidationError } from '../lib/errors';
 import { writeAuditLog } from '../lib/audit';
@@ -501,5 +501,69 @@ settingsRoutes.post('/gdpr/delete/:user_id', async (c) => {
 
   await writeAuditLog(c.env.DB, authUser.orgId, authUser.id, 'DSGVO-Löschung', 'user', targetUserId, 'Personenbezogene Daten anonymisiert');
 
+  return c.json({ success: true });
+});
+
+// ─── File Categories (Materialbank) ─────────────────────────────────────────
+settingsRoutes.get('/file-categories', async (c) => {
+  const user = c.get('user');
+  const db = drizzle(c.env.DB);
+
+  const rows = await db.select().from(fileCategories)
+    .where(eq(fileCategories.orgId, user.orgId))
+    .orderBy(fileCategories.sortOrder);
+
+  return c.json({ data: rows.map(r => ({ id: r.id, name: r.name, color: r.color, sortOrder: r.sortOrder })) });
+});
+
+settingsRoutes.post('/file-categories', async (c) => {
+  const user = c.get('user');
+  const db = drizzle(c.env.DB);
+  const body = await c.req.json();
+
+  if (!body.name) return c.json({ error: 'Name erforderlich' }, 400);
+
+  const existing = await db.select().from(fileCategories).where(eq(fileCategories.orgId, user.orgId));
+
+  const id = crypto.randomUUID();
+  await db.insert(fileCategories).values({
+    id,
+    orgId: user.orgId,
+    name: body.name,
+    color: body.color || '#6b7280',
+    sortOrder: existing.length,
+  });
+
+  return c.json({ id, name: body.name, color: body.color || '#6b7280' }, 201);
+});
+
+settingsRoutes.patch('/file-categories/:id', async (c) => {
+  const user = c.get('user');
+  const db = drizzle(c.env.DB);
+  const catId = c.req.param('id');
+  const body = await c.req.json();
+
+  const existing = await db.select().from(fileCategories)
+    .where(and(eq(fileCategories.id, catId), eq(fileCategories.orgId, user.orgId)));
+  if (existing.length === 0) throw new NotFoundError('Kategorie', catId);
+
+  const updateData: Record<string, any> = {};
+  if (body.name !== undefined) updateData.name = body.name;
+  if (body.color !== undefined) updateData.color = body.color;
+
+  await db.update(fileCategories).set(updateData).where(eq(fileCategories.id, catId));
+  return c.json({ success: true });
+});
+
+settingsRoutes.delete('/file-categories/:id', async (c) => {
+  const user = c.get('user');
+  const db = drizzle(c.env.DB);
+  const catId = c.req.param('id');
+
+  const existing = await db.select().from(fileCategories)
+    .where(and(eq(fileCategories.id, catId), eq(fileCategories.orgId, user.orgId)));
+  if (existing.length === 0) throw new NotFoundError('Kategorie', catId);
+
+  await db.delete(fileCategories).where(eq(fileCategories.id, catId));
   return c.json({ success: true });
 });

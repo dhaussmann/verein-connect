@@ -404,6 +404,16 @@ export const shopOrderItems = sqliteTable('shop_order_items', {
   total: real('total').notNull(),
 });
 
+// ─── File Categories (Materialbank) ─────────────────────────────────────────
+export const fileCategories = sqliteTable('file_categories', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  orgId: text('org_id').notNull().references(() => organizations.id),
+  name: text('name').notNull(),
+  color: text('color').default('#6b7280'),
+  sortOrder: integer('sort_order').default(0),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+});
+
 // ─── Files ───────────────────────────────────────────────────────────────────
 export const files = sqliteTable('files', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -415,6 +425,10 @@ export const files = sqliteTable('files', {
   r2Key: text('r2_key').notNull(),
   uploadedBy: text('uploaded_by').references(() => users.id),
   accessRoles: text('access_roles').default('[]'),
+  categoryId: text('category_id').references(() => fileCategories.id),
+  groupId: text('group_id').references(() => groups.id),
+  visibility: text('visibility').default('admin'),
+  description: text('description'),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
 });
 

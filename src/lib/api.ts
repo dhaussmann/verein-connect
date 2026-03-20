@@ -709,24 +709,91 @@ export const shopApi = {
     }),
 };
 
-// ─── Files ───────────────────────────────────────────────────────────────────
+// ─── Files / Materialbank ────────────────────────────────────────────────────
+
+export interface FileCategory {
+  id: string;
+  name: string;
+  color: string;
+  sortOrder?: number;
+}
+
+export interface MaterialFile {
+  id: string;
+  name: string;
+  description: string;
+  type: string;
+  size: string;
+  sizeBytes: number;
+  uploadedBy: string;
+  uploadedById: string;
+  uploadDate: string;
+  createdAt: string;
+  categoryId: string | null;
+  category: { name: string; color: string } | null;
+  groupId: string | null;
+  groupName: string | null;
+  visibility: 'admin' | 'members';
+}
+
+export interface StorageInfo {
+  usedBytes: number;
+  usedFormatted: string;
+  limitBytes: number;
+  limitFormatted: string;
+  percentUsed: number;
+  fileCount: number;
+}
 
 export const filesApi = {
   list: (params?: Record<string, string>) => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
-    return request<{ folders: string[]; files: unknown[] }>(`/v1/files${qs}`);
+    return request<{ data: MaterialFile[] }>(`/v1/files${qs}`);
   },
 
   upload: (formData: FormData) =>
-    request<unknown>('/v1/files/upload', {
+    request<{ id: string; name: string }>('/v1/files/upload', {
       method: 'POST',
       body: formData,
     }),
 
-  download: (id: string) => `${API_BASE}/v1/files/${id}/download`,
+  update: (id: string, data: Record<string, unknown>) =>
+    request<{ success: boolean }>(`/v1/files/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  downloadUrl: (id: string) => `${API_BASE}/v1/files/${id}/download`,
 
   delete: (id: string) =>
     request<void>(`/v1/files/${id}`, { method: 'DELETE' }),
+
+  bulkDelete: (fileIds: string[]) =>
+    request<{ success: boolean; deleted: number }>('/v1/files/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ file_ids: fileIds }),
+    }),
+
+  storage: () => request<StorageInfo>('/v1/files/storage'),
+
+  // Categories
+  listCategories: () =>
+    request<{ data: FileCategory[] }>('/v1/settings/file-categories'),
+
+  createCategory: (data: { name: string; color: string }) =>
+    request<FileCategory>('/v1/settings/file-categories', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateCategory: (id: string, data: { name?: string; color?: string }) =>
+    request<{ success: boolean }>(`/v1/settings/file-categories/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteCategory: (id: string) =>
+    request<{ success: boolean }>(`/v1/settings/file-categories/${id}`, { method: 'DELETE' }),
 };
 
 // ─── Settings ────────────────────────────────────────────────────────────────

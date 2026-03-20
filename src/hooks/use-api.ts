@@ -447,7 +447,7 @@ export function useOrders() {
   });
 }
 
-// ─── Files ───────────────────────────────────────────────────────────────────
+// ─── Files / Materialbank ────────────────────────────────────────────────────
 
 export function useFiles(params?: Record<string, string>) {
   return useQuery({
@@ -456,10 +456,25 @@ export function useFiles(params?: Record<string, string>) {
   });
 }
 
+export function useFileStorage() {
+  return useQuery({
+    queryKey: ['file-storage'],
+    queryFn: () => filesApi.storage(),
+  });
+}
+
 export function useUploadFile() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (formData: FormData) => filesApi.upload(formData),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['files'] }); qc.invalidateQueries({ queryKey: ['file-storage'] }); },
+  });
+}
+
+export function useUpdateFile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) => filesApi.update(id, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['files'] }); },
   });
 }
@@ -468,7 +483,46 @@ export function useDeleteFile() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => filesApi.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['files'] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['files'] }); qc.invalidateQueries({ queryKey: ['file-storage'] }); },
+  });
+}
+
+export function useBulkDeleteFiles() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (fileIds: string[]) => filesApi.bulkDelete(fileIds),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['files'] }); qc.invalidateQueries({ queryKey: ['file-storage'] }); },
+  });
+}
+
+export function useFileCategories() {
+  return useQuery({
+    queryKey: ['file-categories'],
+    queryFn: () => filesApi.listCategories(),
+  });
+}
+
+export function useCreateFileCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string; color: string }) => filesApi.createCategory(data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['file-categories'] }); },
+  });
+}
+
+export function useUpdateFileCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { name?: string; color?: string } }) => filesApi.updateCategory(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['file-categories'] }); },
+  });
+}
+
+export function useDeleteFileCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => filesApi.deleteCategory(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['file-categories'] }); },
   });
 }
 

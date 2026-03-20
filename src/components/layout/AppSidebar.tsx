@@ -53,6 +53,7 @@ const adminNavItems: NavItem[] = [
       { title: 'Mitglieder', path: '/settings/members', icon: UserCog },
       { title: 'Rollen & Berechtigungen', path: '/settings/roles', icon: Shield },
       { title: 'Profilfelder', path: '/settings/fields', icon: Columns3 },
+      { title: 'Materialbank', path: '/settings/materialbank', icon: FolderArchive },
       { title: 'Benachrichtigungen', path: '/settings/notifications', icon: Bell },
       { title: 'Integrationen', path: '/settings/integrations', icon: Puzzle },
       { title: 'DSGVO & Datenschutz', path: '/settings/gdpr', icon: Lock },

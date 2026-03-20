@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Edit, Trash2, Upload, Copy, GripVertical, Search, Shield, Check, X, Globe, Link2, FileDown, UserPlus, Users, Lock, AlertCircle } from 'lucide-react';
-import { useMembers, useCreateMember, useRoles, useAssignRole, useRemoveRole, useProfileFields, useAuditLog, useMembershipLevels, useCreateMembershipLevel, useUpdateMembershipLevel, useDeleteMembershipLevel, useUpdateProfileField, useDeleteProfileField, useCreateProfileField, useOrganizationSettings, useUpdateOrganization, useUploadLogo } from '@/hooks/use-api';
+import { useMembers, useCreateMember, useRoles, useAssignRole, useRemoveRole, useProfileFields, useAuditLog, useMembershipLevels, useCreateMembershipLevel, useUpdateMembershipLevel, useDeleteMembershipLevel, useUpdateProfileField, useDeleteProfileField, useCreateProfileField, useOrganizationSettings, useUpdateOrganization, useUploadLogo, useFileCategories, useCreateFileCategory, useUpdateFileCategory, useDeleteFileCategory } from '@/hooks/use-api';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import type { Role, MembershipLevel } from '@/lib/api';
@@ -63,6 +63,18 @@ export default function Settings() {
   const createProfileField = useCreateProfileField();
   const updateOrganization = useUpdateOrganization();
   const uploadLogo = useUploadLogo();
+  const { data: fileCategoriesData } = useFileCategories();
+  const createFileCategory = useCreateFileCategory();
+  const updateFileCategory = useUpdateFileCategory();
+  const deleteFileCategory = useDeleteFileCategory();
+
+  const [fileCatDialogOpen, setFileCatDialogOpen] = useState(false);
+  const [fileCatEditId, setFileCatEditId] = useState<string | null>(null);
+  const [fileCatName, setFileCatName] = useState('');
+  const [fileCatColor, setFileCatColor] = useState('#6b7280');
+  const [deleteFileCatConfirm, setDeleteFileCatConfirm] = useState<{ id: string; name: string } | null>(null);
+
+  const fileCategories = fileCategoriesData?.data ?? [];
 
   const membershipLevels: MembershipLevel[] = levelsData?.data ?? [];
 
@@ -225,7 +237,7 @@ export default function Settings() {
   const location = useLocation();
   const activeTab = useMemo(() => {
     const seg = location.pathname.split('/').pop();
-    const validTabs = ['users', 'general', 'roles', 'fields', 'notifications', 'integrations', 'gdpr', 'members'];
+    const validTabs = ['users', 'general', 'roles', 'fields', 'notifications', 'integrations', 'gdpr', 'members', 'materialbank'];
     return validTabs.includes(seg || '') ? seg! : 'general';
   }, [location.pathname]);
 
@@ -845,8 +857,122 @@ export default function Settings() {
               </Card>
             </div>
           </TabsContent>
+
+          {/* MATERIALBANK */}
+          <TabsContent value="materialbank">
+            <Card className="border border-border">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Materialbank-Kategorien</CardTitle>
+                  <Button size="sm" onClick={() => { setFileCatEditId(null); setFileCatName(''); setFileCatColor('#6b7280'); setFileCatDialogOpen(true); }}>
+                    <Plus className="h-4 w-4 mr-2" /> Neue Kategorie
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">Kategorien helfen beim Gruppieren und Filtern von Dateien in der Materialbank, z.B. "Videos", "Trainingsanleitungen" oder "Formulare".</p>
+                {fileCategories.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Farbe</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead className="w-20"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {fileCategories.map((cat: any, i: number) => (
+                        <TableRow key={cat.id} className={i % 2 === 1 ? 'bg-muted/50' : ''}>
+                          <TableCell>
+                            <span className="inline-flex items-center gap-2">
+                              <span className="w-4 h-4 rounded-full border" style={{ backgroundColor: cat.color }} />
+                            </span>
+                          </TableCell>
+                          <TableCell className="font-medium">{cat.name}</TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
+                                setFileCatEditId(cat.id);
+                                setFileCatName(cat.name);
+                                setFileCatColor(cat.color);
+                                setFileCatDialogOpen(true);
+                              }}><Edit className="h-3.5 w-3.5" /></Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteFileCatConfirm({ id: cat.id, name: cat.name })}><Trash2 className="h-3.5 w-3.5" /></Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <p className="text-center text-muted-foreground py-8">Noch keine Kategorien erstellt.</p>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </div>
       </Tabs>
+
+      {/* File Category Dialog */}
+      <Dialog open={fileCatDialogOpen} onOpenChange={setFileCatDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>{fileCatEditId ? 'Kategorie bearbeiten' : 'Neue Kategorie'}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium block mb-1.5">Name</label>
+              <Input value={fileCatName} onChange={e => setFileCatName(e.target.value)} placeholder="z.B. Videos, Trainingsanleitungen" />
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-1.5">Farbe</label>
+              <div className="flex gap-2 flex-wrap">
+                {['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#6b7280'].map(c => (
+                  <button key={c} onClick={() => setFileCatColor(c)} className={`w-8 h-8 rounded-full border-2 transition-all ${fileCatColor === c ? 'border-foreground scale-110' : 'border-transparent'}`} style={{ backgroundColor: c }} />
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFileCatDialogOpen(false)}>Abbrechen</Button>
+            <Button disabled={!fileCatName.trim()} onClick={async () => {
+              try {
+                if (fileCatEditId) {
+                  await updateFileCategory.mutateAsync({ id: fileCatEditId, data: { name: fileCatName.trim(), color: fileCatColor } });
+                  toast.success('Kategorie aktualisiert');
+                } else {
+                  await createFileCategory.mutateAsync({ name: fileCatName.trim(), color: fileCatColor });
+                  toast.success('Kategorie erstellt');
+                }
+                setFileCatDialogOpen(false);
+              } catch (err: any) {
+                toast.error(err.message || 'Fehler');
+              }
+            }}>Speichern</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete File Category Confirm */}
+      <AlertDialog open={!!deleteFileCatConfirm} onOpenChange={() => setDeleteFileCatConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Kategorie löschen?</AlertDialogTitle>
+            <AlertDialogDescription>"{deleteFileCatConfirm?.name}" wird gelöscht. Dateien mit dieser Kategorie verlieren ihre Zuordnung.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
+              if (!deleteFileCatConfirm) return;
+              try {
+                await deleteFileCategory.mutateAsync(deleteFileCatConfirm.id);
+                toast.success('Kategorie gelöscht');
+                setDeleteFileCatConfirm(null);
+              } catch (err: any) {
+                toast.error(err.message || 'Fehler');
+              }
+            }}>Löschen</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Role Editor Dialog */}
       <Dialog open={roleEditorOpen} onOpenChange={setRoleEditorOpen}>
