@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import { useEffect, useState } from 'react';
 import { Link, redirect, useLoaderData, useActionData, useNavigation } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
@@ -222,7 +221,7 @@ export default function ContractNewRoute() {
                 <Select
                   label="Vertragsart"
                   value={form.contract_kind}
-                  onChange={(val) => set('contract_kind', val ?? 'MEMBERSHIP')}
+                  onChange={(val) => set('contract_kind', (val === 'TARIF' ? 'TARIF' : 'MEMBERSHIP'))}
                   data={[
                     { value: 'MEMBERSHIP', label: 'Mitgliedschaft' },
                     { value: 'TARIF', label: 'Tarif' },

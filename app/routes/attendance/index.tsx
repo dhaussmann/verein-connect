@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import { Link, useLoaderData, useSearchParams } from 'react-router';
 import type { LoaderFunctionArgs } from 'react-router';
 import { PageHeader } from '@/components/layout/PageHeader';

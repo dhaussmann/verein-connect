@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import { useState } from 'react';
 import { Form, useActionData, useFetcher, useLoaderData, useNavigation, useSearchParams } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';

@@ -39,9 +39,4 @@ export function Button({ variant = "default", size = "default", asChild: _asChil
   );
 }
 
-// Export buttonVariants as a no-op for backward compat with imports that use it
-export function buttonVariants(_opts?: { variant?: string; size?: string; className?: string }) {
-  return "";
-}
-
 export type { ButtonProps };

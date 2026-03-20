@@ -1,5 +1,4 @@
-/* eslint-disable react-refresh/only-export-components */
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { Form, useLoaderData, useActionData, useNavigation } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -90,17 +89,27 @@ export default function PortalProfileRoute() {
   const [editing, setEditing] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
 
-  useEffect(() => {
-    if (!actionData) return;
-    if (actionData.success && actionData.intent === 'save-profile') {
+  const handleActionResult = useEffectEvent((payload: NonNullable<typeof actionData>) => {
+    if (payload.success && payload.intent === 'save-profile') {
       notifications.show({ color: 'green', message: 'Profil wurde aktualisiert!' });
       setEditing(false);
-    } else if (actionData.success && actionData.intent === 'change-password') {
+      return;
+    }
+
+    if (payload.success && payload.intent === 'change-password') {
       notifications.show({ color: 'green', message: 'Passwort wurde geändert!' });
       setPasswordOpen(false);
-    } else if (actionData.error) {
-      notifications.show({ color: 'red', message: actionData.error });
+      return;
     }
+
+    if (payload.error) {
+      notifications.show({ color: 'red', message: payload.error });
+    }
+  });
+
+  useEffect(() => {
+    if (!actionData) return;
+    handleActionResult(actionData);
   }, [actionData]);
 
   const roleLabel = (r: string) => {

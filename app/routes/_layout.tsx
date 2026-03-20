@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import { useState } from "react";
 import { Outlet, redirect } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";

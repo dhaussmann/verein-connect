@@ -1,5 +1,4 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable react-refresh/only-export-components */
 import { useMemo } from 'react';
 import { Link, useLoaderData, useSearchParams } from 'react-router';
 import type { LoaderFunctionArgs } from 'react-router';
@@ -8,7 +7,7 @@ import { Button, Card, Badge, Text, Group, Stack, Popover } from '@mantine/core'
 import { Plus, ChevronLeft, ChevronRight, CalendarDays, List, Clock, MapPin, Users } from 'lucide-react';
 import { requireRouteData } from '@/core/runtime/route';
 import { listCalendarEventsUseCase } from '@/modules/events/use-cases/events.use-cases';
-import type { Event } from '@/lib/api';
+import type { CalendarEvent } from '@/lib/api';
 
 const categoryBgClasses: Record<string, string> = {
   Training: 'bg-primary text-primary-foreground',
@@ -50,7 +49,7 @@ export default function EventsIndexRoute() {
   const currentMonth = Number(searchParams.get('month') || now.getMonth());
   const currentYear = Number(searchParams.get('year') || now.getFullYear());
 
-  const calendarEvents: Event[] = (apiCalendarEvents as Event[] | undefined) ?? [];
+  const calendarEvents: CalendarEvent[] = apiCalendarEvents ?? [];
 
   const setCalendarState = (month: number, year: number, nextView = view) => {
     const next = new URLSearchParams(searchParams);
@@ -96,17 +95,17 @@ export default function EventsIndexRoute() {
   }, [currentMonth, currentYear]);
 
   const eventsByDate = useMemo(() => {
-    const map: Record<string, Event[]> = {};
+    const map: Record<string, CalendarEvent[]> = {};
     calendarEvents.forEach(e => {
       if (!map[e.date]) map[e.date] = [];
       map[e.date].push(e);
     });
     return map;
-  }, []);
+  }, [calendarEvents]);
 
   const listGroups = useMemo(() => {
     const sorted = [...calendarEvents].sort((a, b) => parseDateStr(a.date).getTime() - parseDateStr(b.date).getTime());
-    const groups: { label: string; events: Event[] }[] = [];
+    const groups: { label: string; events: CalendarEvent[] }[] = [];
     let currentWeek = '';
     sorted.forEach(ev => {
       const d = parseDateStr(ev.date);
@@ -120,7 +119,7 @@ export default function EventsIndexRoute() {
       groups[groups.length - 1].events.push(ev);
     });
     return groups;
-  }, []);
+  }, [calendarEvents]);
 
   const isToday = (dateStr: string) => {
     const t = new Date();

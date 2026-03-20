@@ -7,6 +7,10 @@ interface ToastOptions {
   duration?: number;
 }
 
+type ToastInstance = {
+  id?: string;
+};
+
 export function useToast() {
   return {
     toast: ({ title, description, variant, duration }: ToastOptions) => {
@@ -17,7 +21,7 @@ export function useToast() {
         autoClose: duration ?? 5000,
       });
     },
-    toasts: [] as any[],
+    toasts: [] as ToastInstance[],
     dismiss: (id?: string) => {
       if (id) notifications.hide(id);
     },

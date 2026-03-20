@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import { NavLink, Form, useActionData, useLoaderData, useSearchParams } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { ActionIcon, Badge, Button, Card, Group, Menu, Select, Table, Text } from "@mantine/core";

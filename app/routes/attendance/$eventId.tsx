@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import { useEffect, useState, useMemo } from 'react';
 import { useFetcher, useLoaderData, useActionData } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
@@ -35,6 +34,9 @@ export async function action({ request, context, params }: ActionFunctionArgs) {
   }
 }
 
+type AttendanceLoaderData = Awaited<ReturnType<typeof getAttendanceOccurrenceUseCase>>;
+type AttendanceApiParticipant = NonNullable<AttendanceLoaderData>["attendanceData"][number];
+
 type AttendanceParticipantStatus = 'anwesend' | 'abwesend' | 'entschuldigt' | 'offen';
 
 interface AttendanceParticipant {
@@ -53,11 +55,11 @@ export default function AttendanceCheckInRoute() {
 
   const apiParticipants: AttendanceParticipant[] = useMemo(() => {
     if (!Array.isArray(attendanceData)) return [];
-    return attendanceData.map((a) => ({
+    return (attendanceData as AttendanceApiParticipant[]).map((a) => ({
       id: a.id || a.userId,
       memberId: a.userId || a.memberId,
-      name: a.memberName || a.name || 'Unbekannt',
-      initials: (a.memberName || a.name || 'U').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
+      name: a.memberName || 'Unbekannt',
+      initials: (a.memberName || 'U').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
       status: a.status === 'present' ? 'anwesend' as const : a.status === 'absent' ? 'abwesend' as const : a.status === 'excused' ? 'entschuldigt' as const : 'offen' as const,
       checkedInAt: a.checkedInAt,
     }));

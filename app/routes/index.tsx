@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import { redirect } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
 import { getSessionTokens, getEnv } from "@/lib/session";

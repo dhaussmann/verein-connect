@@ -186,7 +186,7 @@ function TarifDialogForm({ editItem, groups, membershipTypes, onOpenChange, onSa
   const [form, setForm] = useState<TarifFormData>(() => editItem ? fromTarif(editItem) : emptyForm());
   const isEdit = !!editItem;
 
-  const set = (key: keyof TarifFormData, value: any) =>
+  const set = <K extends keyof TarifFormData>(key: K, value: TarifFormData[K]) =>
     setForm(prev => ({ ...prev, [key]: value }));
 
   const updatePricing = (index: number, field: keyof PricingRow, value: string) => {
@@ -307,7 +307,7 @@ function TarifDialogForm({ editItem, groups, membershipTypes, onOpenChange, onSa
             <div>
               <p className="text-xs uppercase text-muted-foreground mb-1">Beschreibung</p>
               <RichTextEditor
-                value={form.description}
+                content={form.description}
                 onChange={v => set('description', v)}
                 placeholder="Detaillierte Beschreibung des Tarifs"
               />

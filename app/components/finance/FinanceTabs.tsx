@@ -5,8 +5,18 @@ export function FinanceTabs({ value }: { value: "invoices" | "accounting" }) {
   return (
     <Tabs value={value} mb="lg">
       <Tabs.List>
-        <Tabs.Tab component={NavLink} to="/finance" value="invoices">Rechnungen</Tabs.Tab>
-        <Tabs.Tab component={NavLink} to="/finance/accounting" value="accounting">Buchhaltung</Tabs.Tab>
+        <Tabs.Tab
+          value="invoices"
+          renderRoot={(props) => <NavLink {...props} to="/finance" />}
+        >
+          Rechnungen
+        </Tabs.Tab>
+        <Tabs.Tab
+          value="accounting"
+          renderRoot={(props) => <NavLink {...props} to="/finance/accounting" />}
+        >
+          Buchhaltung
+        </Tabs.Tab>
       </Tabs.List>
     </Tabs>
   );

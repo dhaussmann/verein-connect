@@ -180,7 +180,7 @@ function MembershipTypeDialogForm({ editItem, groups, onOpenChange, onSave, savi
   const [form, setForm] = useState<MembershipTypeFormData>(() => editItem ? fromMembershipType(editItem) : emptyForm());
   const isEdit = !!editItem;
 
-  const set = (key: keyof MembershipTypeFormData, value: any) =>
+  const set = <K extends keyof MembershipTypeFormData>(key: K, value: MembershipTypeFormData[K]) =>
     setForm(prev => ({ ...prev, [key]: value }));
 
   const updatePricing = (index: number, field: keyof PricingRow, value: string) => {
@@ -272,7 +272,7 @@ function MembershipTypeDialogForm({ editItem, groups, onOpenChange, onSave, savi
             <div>
               <p className="text-xs uppercase text-muted-foreground mb-1">Beschreibung</p>
               <RichTextEditor
-                value={form.description}
+                content={form.description}
                 onChange={v => set('description', v)}
                 placeholder="Detaillierte Beschreibung der Mitgliedsart"
               />

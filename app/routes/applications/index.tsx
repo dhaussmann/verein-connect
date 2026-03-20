@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import { useEffect, useState } from 'react';
 import { useFetcher, useLoaderData, useActionData, useSearchParams } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
@@ -63,7 +62,7 @@ export default function ApplicationsIndexRoute() {
   const [searchParams, setSearchParams] = useSearchParams();
   const fetcher = useFetcher<typeof action>();
   const statusFilter = searchParams.get('status') || '';
-  const applications: PaginatedResponse<ContractApplication>['data'] = data?.data || [];
+  const applications = (data?.data || []) as PaginatedResponse<ContractApplication>['data'];
   const meta = data?.meta;
 
   const [detailOpen, setDetailOpen] = useState(false);

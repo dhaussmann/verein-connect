@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import { useState } from "react";
 import { Link, Form, useActionData } from "react-router";
 import type { ActionFunctionArgs } from "react-router";
@@ -31,7 +30,12 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
   try {
     await requestPasswordReset(
-      env as Required<Pick<typeof env, "DB" | "KV" | "FRONTEND_URL">> & Pick<typeof env, "RESEND_API_KEY">,
+      {
+        DB: env.DB,
+        KV: env.KV,
+        FRONTEND_URL: env.FRONTEND_URL,
+        RESEND_API_KEY: env.RESEND_API_KEY,
+      },
       parsed.data.email,
     );
   } catch {

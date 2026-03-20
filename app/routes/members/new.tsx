@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import { useState } from "react";
 import { Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
 import { redirect } from "react-router";

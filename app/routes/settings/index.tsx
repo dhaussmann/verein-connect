@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import { Form, useActionData, useLoaderData, useNavigation } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import { Badge, Button, Card, Group, Stack, TextInput } from '@mantine/core';

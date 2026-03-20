@@ -1,5 +1,4 @@
-/* eslint-disable react-refresh/only-export-components */
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { useFetcher, useLoaderData, useActionData } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import { Receipt, Play, AlertCircle, CheckCircle } from 'lucide-react';
@@ -40,16 +39,23 @@ export default function BillingIndexRoute() {
   const schedule = data;
   const contracts = schedule?.contracts || [];
 
-  useEffect(() => {
-    const payload = fetcher.data || actionData;
-    if (!payload) return;
+  const handleResult = useEffectEvent((payload: NonNullable<typeof fetcher.data | typeof actionData>) => {
     if (payload.success && payload.result) {
       setResult(payload.result);
       setConfirmOpen(false);
       notifications.show({ color: 'green', message: `${payload.result.created} Rechnungen erstellt` });
-    } else if (payload.error) {
+      return;
+    }
+
+    if (payload.error) {
       notifications.show({ color: 'red', message: payload.error });
     }
+  });
+
+  useEffect(() => {
+    const payload = fetcher.data || actionData;
+    if (!payload) return;
+    handleResult(payload);
   }, [fetcher.data, actionData]);
 
   return (

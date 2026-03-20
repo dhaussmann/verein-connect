@@ -46,4 +46,3 @@ const Toggle = React.forwardRef<HTMLButtonElement, ToggleProps>(
 Toggle.displayName = "Toggle";
 
 export { Toggle };
-export const toggleVariants = (_opts?: { variant?: ToggleVariant; size?: ToggleSize }) => "";
