@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { notifications } from '@mantine/notifications';
 import { requireRouteData } from '@/core/runtime/route';
+import { groupMemberRoleOptions, groupTypeOptions } from '@/modules/hockey/hockey-options';
 import { addGroupMemberUseCase } from '@/modules/groups/use-cases/add-group-member.use-case';
 import { removeGroupMemberUseCase } from '@/modules/groups/use-cases/remove-group-member.use-case';
 import { upsertBankAccountUseCase, deleteBankAccountUseCase } from '@/modules/members/use-cases/bank-account.use-case';
@@ -21,28 +22,22 @@ import { assignMemberRoleUseCase } from '@/modules/members/use-cases/role-assign
 import { updateMemberUseCase } from '@/modules/members/use-cases/update-member.use-case';
 import { changeMemberStatusUseCase } from '@/modules/members/use-cases/change-member-status.use-case';
 import { listGuardiansUseCase, createGuardianUseCase, updateGuardianUseCase, deleteGuardianUseCase } from '@/modules/members/use-cases/guardian.use-case';
-import { assignMembershipLevelUseCase, getUserMembershipLevelsUseCase, listMembershipLevelsUseCase, removeMembershipLevelUseCase } from '@/modules/members/use-cases/membership-levels.use-case';
 import type { MemberProfileFieldOption } from '@/modules/members/types/member.types';
 
 const statusColor = (s: string) =>
   s === 'Aktiv' ? 'green' : s === 'Inaktiv' ? 'gray' : 'yellow';
 
+const groupTypeLabel = Object.fromEntries(groupTypeOptions.map((option) => [option.value, option.label]));
+
 export async function loader({ request, context, params }: LoaderFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
   const memberId = params.id;
   if (!memberId) throw new Error("Mitglied fehlt");
-  const [detail, guardians, membershipLevels, assignedMembershipLevels] = await Promise.all([
+  const [detail, guardians] = await Promise.all([
     getMemberDetailUseCase(env, { orgId: user.orgId, memberId }),
     listGuardiansUseCase(env, { orgId: user.orgId, userId: memberId }),
-    listMembershipLevelsUseCase(env, user.orgId),
-    getUserMembershipLevelsUseCase(env, memberId),
   ]);
-  const assignedByLevelId = new Map(assignedMembershipLevels.map((row) => [row.levelId, row.assignedAt]));
-  const memberMembershipLevels = membershipLevels
-    .filter((level) => assignedByLevelId.has(level.id))
-    .map((level) => ({ ...level, assignedAt: assignedByLevelId.get(level.id) || null }));
-
-  return { ...detail, guardians, membershipLevels, memberMembershipLevels };
+  return { ...detail, guardians };
 }
 
 export async function action({ request, context, params }: ActionFunctionArgs) {
@@ -75,7 +70,13 @@ export async function action({ request, context, params }: ActionFunctionArgs) {
     if (intent === "add-group-member") {
       const groupId = String(formData.get("groupId") || "");
       if (!groupId) return { success: false, intent, error: "Gruppe fehlt" };
-      await addGroupMemberUseCase(env, { orgId: user.orgId, actorUserId: user.id, groupId, userId: memberId });
+      await addGroupMemberUseCase(env, {
+        orgId: user.orgId,
+        actorUserId: user.id,
+        groupId,
+        userId: memberId,
+        role: String(formData.get("groupRole") || "") || "Spieler",
+      });
       return { success: true, intent };
     }
     if (intent === "assign-role") {
@@ -88,18 +89,6 @@ export async function action({ request, context, params }: ActionFunctionArgs) {
       const groupId = String(formData.get("groupId") || "");
       if (!groupId) return { success: false, intent, error: "Gruppe fehlt" };
       await removeGroupMemberUseCase(env, { orgId: user.orgId, actorUserId: user.id, groupId, userId: memberId });
-      return { success: true, intent };
-    }
-    if (intent === "assign-membership-level") {
-      const levelId = String(formData.get("levelId") || "");
-      if (!levelId) return { success: false, intent, error: "Mitgliedsstufe fehlt" };
-      await assignMembershipLevelUseCase(env, { userId: memberId, levelId });
-      return { success: true, intent };
-    }
-    if (intent === "remove-membership-level") {
-      const levelId = String(formData.get("levelId") || "");
-      if (!levelId) return { success: false, intent, error: "Mitgliedsstufe fehlt" };
-      await removeMembershipLevelUseCase(env, { userId: memberId, levelId });
       return { success: true, intent };
     }
     if (intent === "upsert-bank-account") {
@@ -178,6 +167,7 @@ export async function action({ request, context, params }: ActionFunctionArgs) {
           street: String(formData.get("street") || "") || undefined,
           zip: String(formData.get("zip") || "") || undefined,
           city: String(formData.get("city") || "") || undefined,
+          join_date: String(formData.get("join_date") || "") || undefined,
           profile_fields: Object.keys(profileFields).length > 0 ? profileFields : undefined,
         },
       });
@@ -191,7 +181,7 @@ export async function action({ request, context, params }: ActionFunctionArgs) {
 }
 
 export default function MemberDetail() {
-  const { member, contracts, groups, roles, membershipLevels, memberMembershipLevels, profileFields: profileFieldDefinitions, bankAccount, guardians } = useLoaderData<typeof loader>();
+  const { member, contracts, groups, roles, profileFields: profileFieldDefinitions, bankAccount, guardians } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<Record<string, string>>({});
@@ -199,8 +189,7 @@ export default function MemberDetail() {
   const [selectedRoleId, setSelectedRoleId] = useState('');
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState('');
-  const [membershipLevelModalOpen, setMembershipLevelModalOpen] = useState(false);
-  const [selectedMembershipLevelId, setSelectedMembershipLevelId] = useState('');
+  const [selectedGroupRole, setSelectedGroupRole] = useState('Spieler');
   const [bankEditing, setBankEditing] = useState(false);
   const [bankForm, setBankForm] = useState({ accountHolder: '', iban: '', bic: '', bankName: '', sepaMandate: false, sepaMandateDate: '', sepaMandateRef: '' });
   const [guardianModalOpen, setGuardianModalOpen] = useState(false);
@@ -208,6 +197,7 @@ export default function MemberDetail() {
   const [guardianForm, setGuardianForm] = useState({ firstName: '', lastName: '', street: '', zip: '', city: '', phone: '', email: '' });
   const allRoles = roles;
   const customFieldDefs: MemberProfileFieldOption[] = profileFieldDefinitions;
+  const joinDateIso = member.joinDate ? member.joinDate.split('.').reverse().join('-') : '';
 
   const handleFetcherResult = useEffectEvent((data: NonNullable<typeof fetcher.data>) => {
     if (data.error) {
@@ -228,12 +218,6 @@ export default function MemberDetail() {
       notifications.show({ color: 'green', message: 'Rolle zugewiesen' });
       setRoleModalOpen(false);
       setSelectedRoleId('');
-    } else if (data.intent === 'assign-membership-level') {
-      notifications.show({ color: 'green', message: 'Mitgliedsstufe zugewiesen' });
-      setMembershipLevelModalOpen(false);
-      setSelectedMembershipLevelId('');
-    } else if (data.intent === 'remove-membership-level') {
-      notifications.show({ color: 'green', message: 'Mitgliedsstufe entfernt' });
     } else if (data.intent === 'delete-bank-account') {
       notifications.show({ color: 'green', message: 'Kontoverbindung gelöscht' });
       setBankEditing(false);
@@ -257,8 +241,7 @@ export default function MemberDetail() {
   }, [fetcher.data]);
 
   const roleAssignments = member.roles.map((r: string) => ({ role: r, startDate: member.joinDate }));
-  const availableRoles = allRoles.filter((role) => !member.roles.includes(role.name));
-  const availableMembershipLevels = membershipLevels.filter((level) => !memberMembershipLevels.some((assigned) => assigned.id === level.id));
+  const availableRoles = allRoles.filter((role) => role.isAssignable && !member.roles.includes(role.name));
 
   const profileFieldRows = [
     { label: 'Vorname', value: member.firstName },
@@ -303,6 +286,7 @@ export default function MemberDetail() {
                     phone: member.phone || '',
                     mobile: member.mobile || '',
                     birth_date: member.birthDate || '',
+                    join_date: joinDateIso,
                     gender: member.gender || '',
                     street: member.street || '',
                     zip: member.zip || '',
@@ -375,6 +359,7 @@ export default function MemberDetail() {
                     { label: 'Telefon', key: 'phone' },
                     { label: 'Mobil', key: 'mobile' },
                     { label: 'Geburtsdatum', key: 'birth_date' },
+                    { label: 'Beitritt', key: 'join_date' },
                     { label: 'Geschlecht', key: 'gender' },
                     { label: 'Straße', key: 'street' },
                     { label: 'PLZ', key: 'zip' },
@@ -383,6 +368,7 @@ export default function MemberDetail() {
                     <TextInput
                       key={f.key}
                       label={f.label}
+                      type={f.key === 'join_date' || f.key === 'birth_date' ? 'date' : 'text'}
                       value={editForm[f.key] ?? ''}
                       onChange={(e) => setEditForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
                     />
@@ -448,49 +434,13 @@ export default function MemberDetail() {
 
               <div className="mt-6">
                 <Group justify="space-between" mb="xs">
-                  <Text size="sm" fw={600}>Mitgliedsstufen</Text>
-                  <Button size="xs" variant="outline" onClick={() => setMembershipLevelModalOpen(true)}>
-                    Mitgliedsstufe zuweisen
-                  </Button>
-                </Group>
-                {memberMembershipLevels.length === 0 ? (
-                  <Text size="sm" c="dimmed">Keine Mitgliedsstufen zugewiesen.</Text>
-                ) : (
-                  <Group gap="xs" mb="lg">
-                    {memberMembershipLevels.map((level) => (
-                      <Badge
-                        key={level.id}
-                        color={level.color ?? 'blue'}
-                        variant="light"
-                        rightSection={
-                          <button
-                            className="ml-1 rounded-full hover:bg-black/20 p-0.5"
-                            onClick={() => {
-                              if (confirm(`Mitgliedsstufe '${level.name}' entfernen?`)) {
-                                fetcher.submit({ intent: 'remove-membership-level', levelId: level.id }, { method: 'post' });
-                              }
-                            }}
-                          >
-                            <X size={10} />
-                          </button>
-                        }
-                      >
-                        {level.name}
-                      </Badge>
-                    ))}
-                  </Group>
-                )}
-              </div>
-
-              <div className="mt-6">
-                <Group justify="space-between" mb="xs">
-                  <Text size="sm" fw={600}>Gruppen / Mannschaften</Text>
+                  <Text size="sm" fw={600}>Teams / Gruppen</Text>
                   <Button size="xs" variant="outline" leftSection={<Plus size={14} />} onClick={() => setGroupModalOpen(true)}>
-                    Gruppe zuweisen
+                    Team zuweisen
                   </Button>
                 </Group>
                 {member.groups.length === 0 ? (
-                  <Text size="sm" c="dimmed">Keine Gruppen zugewiesen.</Text>
+                  <Text size="sm" c="dimmed">Keine Teams zugewiesen.</Text>
                 ) : (
                   <Group gap="xs">
                     {member.groups.map((g) => (
@@ -511,7 +461,7 @@ export default function MemberDetail() {
                         }
                       >
                         {g.name}
-                        {g.category === 'team' && <span className="text-[10px] opacity-70 ml-1">Team</span>}
+                        <span className="text-[10px] opacity-70 ml-1">{groupTypeLabel[g.groupType || 'standard'] || g.groupType || g.category}</span>
                       </Badge>
                     ))}
                   </Group>
@@ -803,6 +753,60 @@ export default function MemberDetail() {
         </Tabs.Panel>
       </Tabs>
 
+      <Modal opened={roleModalOpen} onClose={() => setRoleModalOpen(false)} title="Rolle zuweisen">
+        <Stack>
+          <Select
+            label="Rolle"
+            value={selectedRoleId}
+            onChange={(value) => setSelectedRoleId(value ?? '')}
+            data={availableRoles.map((role) => ({
+              value: role.id,
+              label: `${role.name} · ${role.roleType} · ${role.scope}`,
+            }))}
+          />
+          <Group justify="flex-end">
+            <Button variant="outline" onClick={() => setRoleModalOpen(false)}>Abbrechen</Button>
+            <Button
+              disabled={!selectedRoleId || fetcher.state !== 'idle'}
+              onClick={() => fetcher.submit({ intent: 'assign-role', roleId: selectedRoleId }, { method: 'post' })}
+            >
+              Zuweisen
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal opened={groupModalOpen} onClose={() => setGroupModalOpen(false)} title="Team / Gruppe zuweisen">
+        <Stack>
+          <Select
+            label="Gruppe"
+            value={selectedGroupId}
+            onChange={(value) => setSelectedGroupId(value ?? '')}
+            data={groups
+              .filter((group) => !member.groups.some((assigned) => assigned.id === group.id))
+              .map((group) => ({
+                value: group.id,
+                label: [group.name, group.ageBand, group.season].filter(Boolean).join(' · '),
+              }))}
+          />
+          <Select
+            label="Funktion"
+            value={selectedGroupRole}
+            onChange={(value) => setSelectedGroupRole(value ?? 'Spieler')}
+            data={groupMemberRoleOptions}
+          />
+          <Group justify="flex-end">
+            <Button variant="outline" onClick={() => setGroupModalOpen(false)}>Abbrechen</Button>
+            <Button
+              disabled={!selectedGroupId || fetcher.state !== 'idle'}
+              onClick={() => fetcher.submit({ intent: 'add-group-member', groupId: selectedGroupId, groupRole: selectedGroupRole }, { method: 'post' })}
+            >
+              Zuweisen
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
       {/* Guardian modal */}
       <Modal
         opened={guardianModalOpen}
@@ -838,82 +842,6 @@ export default function MemberDetail() {
         </Stack>
       </Modal>
 
-      {/* Group assign modal */}
-      <Modal opened={groupModalOpen} onClose={() => setGroupModalOpen(false)} title="Gruppe zuweisen" size="sm">
-        <Stack gap="md">
-          <Select
-            label="Gruppe"
-            value={selectedGroupId}
-            onChange={(val) => setSelectedGroupId(val ?? '')}
-            placeholder="Gruppe wählen..."
-            data={groups
-              .filter((g) => !member.groups.some((mg) => mg.id === g.id))
-              .map((g) => ({
-                value: g.id,
-                label: `${g.name}${g.category === 'team' ? ' (Team)' : ''}`,
-              }))}
-          />
-        </Stack>
-        <Group justify="flex-end" mt="md">
-          <Button variant="outline" onClick={() => { setGroupModalOpen(false); setSelectedGroupId(''); }}>Abbrechen</Button>
-          <Button
-            disabled={!selectedGroupId || fetcher.state !== 'idle'}
-            onClick={() => {
-              fetcher.submit({ intent: 'add-group-member', groupId: selectedGroupId }, { method: 'post' });
-            }}
-          >
-            {fetcher.state !== 'idle' ? 'Wird zugewiesen...' : 'Zuweisen'}
-          </Button>
-        </Group>
-      </Modal>
-
-      {/* Role assign modal */}
-      <Modal opened={roleModalOpen} onClose={() => setRoleModalOpen(false)} title="Rolle zuweisen" size="sm">
-        <Stack gap="md">
-          <Select
-            label="Rolle"
-            value={selectedRoleId}
-            onChange={(val) => setSelectedRoleId(val ?? '')}
-            placeholder="Rolle wählen"
-            data={availableRoles.map((role) => ({ value: role.id, label: role.name }))}
-          />
-          <TextInput label="Startdatum" type="text" placeholder="TT.MM.JJJJ" defaultValue="17.03.2026" />
-        </Stack>
-        <Group justify="flex-end" mt="md">
-          <Button variant="outline" onClick={() => setRoleModalOpen(false)}>Abbrechen</Button>
-          <Button
-            disabled={!selectedRoleId || fetcher.state !== 'idle'}
-            onClick={() => {
-              fetcher.submit({ intent: 'assign-role', roleId: selectedRoleId }, { method: 'post' });
-            }}
-          >
-            {fetcher.state !== 'idle' ? 'Wird zugewiesen...' : 'Zuweisen'}
-          </Button>
-        </Group>
-      </Modal>
-
-      <Modal opened={membershipLevelModalOpen} onClose={() => setMembershipLevelModalOpen(false)} title="Mitgliedsstufe zuweisen" size="sm">
-        <Stack gap="md">
-          <Select
-            label="Mitgliedsstufe"
-            value={selectedMembershipLevelId}
-            onChange={(val) => setSelectedMembershipLevelId(val ?? '')}
-            placeholder="Mitgliedsstufe wählen"
-            data={availableMembershipLevels.map((level) => ({ value: level.id, label: level.name }))}
-          />
-        </Stack>
-        <Group justify="flex-end" mt="md">
-          <Button variant="outline" onClick={() => setMembershipLevelModalOpen(false)}>Abbrechen</Button>
-          <Button
-            disabled={!selectedMembershipLevelId || fetcher.state !== 'idle'}
-            onClick={() => {
-              fetcher.submit({ intent: 'assign-membership-level', levelId: selectedMembershipLevelId }, { method: 'post' });
-            }}
-          >
-            {fetcher.state !== 'idle' ? 'Wird zugewiesen...' : 'Zuweisen'}
-          </Button>
-        </Group>
-      </Modal>
     </div>
   );
 }

@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
 import { redirect } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { Button, Card, Select, Checkbox, Divider, TextInput, Group, Text } from "@mantine/core";
+import { Button, Card, Select, Checkbox, Divider, TextInput, Group, Text, Stack, Badge } from "@mantine/core";
 import { Calendar as CalIcon, Upload } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { requireRouteData } from "@/core/runtime/route";
@@ -10,6 +10,11 @@ import { getFirstFieldError } from "@/lib/forms";
 import { getMemberFormOptionsUseCase } from "@/modules/members/use-cases/get-member-form-options.use-case";
 import { createMemberUseCase } from "@/modules/members/use-cases/create-member.use-case";
 import { createMemberFormSchema } from "@/modules/members/schemas/create-member.schema";
+import { groupMemberRoleOptions } from "@/modules/hockey/hockey-options";
+
+function formatGroupLabel(group: { name: string; ageBand: string | null; season: string | null; groupType: string | null }) {
+  return [group.name, group.ageBand, group.season].filter(Boolean).join(" · ");
+}
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
@@ -42,6 +47,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
       .map(([key, value]) => [key.replace(/^custom_/, ""), String(value)]),
   );
 
+  const roleIds = formData.getAll("roleIds").map(String).filter(Boolean);
+  const groupIds = formData.getAll("groupIds").map(String).filter(Boolean);
+  const groupMemberRole = String(formData.get("groupMemberRole") || "") || "Spieler";
+
   try {
     await createMemberUseCase(env, {
       orgId: user.orgId,
@@ -56,9 +65,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
       street: parsed.data.street,
       zip: parsed.data.zip,
       city: parsed.data.city,
+      joinDate: String(formData.get("joinDate") || "") || undefined,
       status: parsed.data.status === "Aktiv" ? "active" : parsed.data.status === "Inaktiv" ? "inactive" : "pending",
-      roleId: String(formData.get("roleId") || "") || undefined,
-      groupId: String(formData.get("groupId") || "") || undefined,
+      roleIds,
+      groupAssignments: groupIds.map((groupId) => ({ groupId, role: groupMemberRole })),
       profileFields,
     });
   } catch (error) {
@@ -73,6 +83,15 @@ export default function MemberCreateRoute() {
   const actionData = useActionData<typeof action>();
   const { roles, groups, profileFields } = useLoaderData<typeof loader>();
   const [dsgvo, setDsgvo] = useState(false);
+  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+  const [groupMemberRole, setGroupMemberRole] = useState("Spieler");
+
+  const assignableRoles = roles.filter((role) => role.isAssignable);
+  const highlightedProfileFields = useMemo(
+    () => profileFields.filter((field) => field.onRegistrationForm || ["Sport", "Notfall", "Medizin", "Ausrüstung"].includes(field.category || "")),
+    [profileFields],
+  );
 
   return (
     <div>
@@ -90,7 +109,7 @@ export default function MemberCreateRoute() {
                   <TextInput
                     name="birthDate"
                     label="Geburtsdatum"
-                    placeholder="TT.MM.JJJJ"
+                    type="date"
                     rightSection={<CalIcon className="h-4 w-4 text-muted-foreground" />}
                   />
                 </div>
@@ -135,16 +154,15 @@ export default function MemberCreateRoute() {
             <Divider />
 
             <div>
-              <Text fw={600} mb="md">Vereinsdaten</Text>
+              <Text fw={600} mb="md">Vereins- und Hockeydaten</Text>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="relative">
-                  <TextInput
-                    label="Beitrittsdatum"
-                    placeholder="TT.MM.JJJJ"
-                    defaultValue="19.03.2026"
-                    rightSection={<CalIcon className="h-4 w-4 text-muted-foreground" />}
-                  />
-                </div>
+                <TextInput
+                  name="joinDate"
+                  label="Beitrittsdatum"
+                  type="date"
+                  defaultValue={new Date().toISOString().slice(0, 10)}
+                  rightSection={<CalIcon className="h-4 w-4 text-muted-foreground" />}
+                />
                 <Select
                   name="status"
                   label="Status"
@@ -155,50 +173,103 @@ export default function MemberCreateRoute() {
                     { value: "Ausstehend", label: "Ausstehend" },
                   ]}
                 />
+              </div>
+
+              <Divider my="lg" />
+
+              <Text size="sm" fw={600} mb="xs">Vereinsfunktionen</Text>
+              {assignableRoles.length === 0 ? (
+                <Text size="sm" c="dimmed">Keine direkt zuweisbaren Funktionen vorhanden.</Text>
+              ) : (
+                <Stack gap="xs">
+                  {assignableRoles.map((role) => (
+                    <Checkbox
+                      key={role.id}
+                      name="roleIds"
+                      value={role.id}
+                      checked={selectedRoleIds.includes(role.id)}
+                      onChange={(event) => {
+                        setSelectedRoleIds((current) => event.currentTarget.checked
+                          ? [...current, role.id]
+                          : current.filter((id) => id !== role.id));
+                      }}
+                      label={
+                        <Group gap={6}>
+                          <Text size="sm">{role.name}</Text>
+                          <Badge size="xs" variant="outline">{role.roleType}</Badge>
+                          <Badge size="xs" variant="outline">{role.scope}</Badge>
+                        </Group>
+                      }
+                      description={role.description}
+                    />
+                  ))}
+                </Stack>
+              )}
+
+              <Divider my="lg" />
+
+              <Text size="sm" fw={600} mb="xs">Teams / Gruppen</Text>
+              <Stack gap="xs">
+                {groups.map((group) => (
+                  <Checkbox
+                    key={group.id}
+                    name="groupIds"
+                    value={group.id}
+                    checked={selectedGroupIds.includes(group.id)}
+                    onChange={(event) => {
+                      setSelectedGroupIds((current) => event.currentTarget.checked
+                        ? [...current, group.id]
+                        : current.filter((id) => id !== group.id));
+                    }}
+                    label={formatGroupLabel(group)}
+                    description={[group.league, group.location].filter(Boolean).join(" · ") || undefined}
+                  />
+                ))}
+              </Stack>
+              <div className="mt-4 max-w-sm">
                 <Select
-                  name="roleId"
-                  label="Rolle"
-                  placeholder="Bitte wählen"
-                  data={roles.map((role) => ({ value: role.id, label: role.name }))}
-                />
-                <Select
-                  name="groupId"
-                  label="Mannschaft / Gruppe"
-                  placeholder="Bitte wählen"
-                  data={groups.map((group) => ({ value: group.id, label: group.name }))}
+                  name="groupMemberRole"
+                  label="Funktion in den gewählten Gruppen"
+                  value={groupMemberRole}
+                  onChange={(value) => setGroupMemberRole(value ?? "Spieler")}
+                  data={groupMemberRoleOptions}
                 />
               </div>
             </div>
+
+            {highlightedProfileFields.length > 0 && (
+              <>
+                <Divider />
+                <div>
+                  <Text fw={600} mb="md">Sportprofil & Notfall</Text>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {highlightedProfileFields.map((field) => (
+                      <div key={field.id}>
+                        {field.type === "text" && (
+                          <TextInput name={`custom_${field.name}`} label={field.label} required={field.required} />
+                        )}
+                        {field.type === "select" && (
+                          <Select
+                            name={`custom_${field.name}`}
+                            label={field.label}
+                            placeholder="Bitte wählen"
+                            data={field.options.map((option) => ({ value: option, label: option }))}
+                            required={field.required}
+                          />
+                        )}
+                        {field.type === "checkbox" && (
+                          <Checkbox name={`custom_${field.name}`} label={field.label} mt="sm" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
 
             {actionData?.error && (
               <Text c="red" size="sm">{actionData.error}</Text>
             )}
-
-            <Divider />
-
-            <div>
-              <Text fw={600} mb="md">Zusatzfelder</Text>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {profileFields.map((field) => (
-                  <div key={field.id}>
-                    {field.type === "text" && (
-                      <TextInput name={`custom_${field.name}`} label={field.label} />
-                    )}
-                    {field.type === "select" && (
-                      <Select
-                        name={`custom_${field.name}`}
-                        label={field.label}
-                        placeholder="Bitte wählen"
-                        data={field.options.map((option) => ({ value: option, label: option }))}
-                      />
-                    )}
-                    {field.type === "checkbox" && (
-                      <Checkbox name={`custom_${field.name}`} label={field.label} mt="sm" />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
 
             <Divider />
 

@@ -28,7 +28,10 @@ export function toMemberRoleOption(role: RoleRow, memberCount: number): MemberRo
   return {
     id: role.id,
     name: role.name,
-    category: role.category === "system" ? "System" : role.category === "team" ? "Sport" : "Verein",
+    category: role.category === "system" ? "System" : "Verein",
+    roleType: role.roleType || "staff",
+    scope: role.scope || "club",
+    isAssignable: role.isAssignable === 1,
     memberCount,
     isSystem: role.isSystem === 1,
     description: role.description || "",
@@ -45,6 +48,17 @@ export function toMemberGroupOption(group: GroupRow): MemberGroupOption {
     name: group.name,
     description: group.description,
     category: group.category,
+    groupType: group.groupType,
+    ageBand: group.ageBand,
+    genderScope: group.genderScope,
+    season: group.season,
+    league: group.league,
+    location: group.location,
+    trainingFocus: group.trainingFocus,
+    visibility: group.visibility,
+    admissionOpen: group.admissionOpen === 1,
+    maxMembers: group.maxMembers,
+    maxGoalies: group.maxGoalies,
     createdAt: group.createdAt || "",
   };
 }
@@ -52,11 +66,13 @@ export function toMemberGroupOption(group: GroupRow): MemberGroupOption {
 export function toMemberProfileFieldOption(field: ProfileFieldRow): MemberProfileFieldOption {
   return {
     id: field.id,
+    category: field.category,
     name: field.fieldName,
     label: field.fieldLabel,
     type: field.fieldType,
     options: field.options ? JSON.parse(field.options) : [],
     required: field.isRequired === 1,
+    onRegistrationForm: field.onRegistrationForm === 1,
   };
 }
 
@@ -94,10 +110,11 @@ export async function toMemberListItem(
       id: group.groupId,
       name: group.groupName,
       category: group.category,
+      groupType: group.groupType,
       role: group.memberRole,
     })),
-    joinDate: row.createdAt
-      ? new Date(row.createdAt).toLocaleDateString("de-DE", {
+    joinDate: (row.joinDate || row.createdAt)
+      ? new Date((row.joinDate || row.createdAt) as string).toLocaleDateString("de-DE", {
           day: "2-digit",
           month: "2-digit",
           year: "numeric",
@@ -119,7 +136,7 @@ export async function toMemberFormOptions(
   ]);
 
   return {
-    roles: roles.map((role) => toMemberRoleOption(role, 0)),
+    roles: roles.filter((role) => role.isAssignable === 1).map((role) => toMemberRoleOption(role, 0)),
     groups: groups.map(toMemberGroupOption),
     profileFields: profileFields.map(toMemberProfileFieldOption),
   };

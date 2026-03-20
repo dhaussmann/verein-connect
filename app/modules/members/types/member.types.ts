@@ -8,6 +8,7 @@ export type MemberGroup = {
   id: string;
   name: string;
   category: string | null;
+  groupType?: string | null;
   role: string | null;
 };
 
@@ -38,6 +39,9 @@ export type MemberRoleOption = {
   id: string;
   name: string;
   category: string;
+  roleType: string;
+  scope: string;
+  isAssignable: boolean;
   memberCount: number;
   isSystem: boolean;
   description: string;
@@ -52,6 +56,17 @@ export type MemberGroupOption = {
   name: string;
   description: string | null;
   category: string | null;
+  groupType: string | null;
+  ageBand: string | null;
+  genderScope: string | null;
+  season: string | null;
+  league: string | null;
+  location: string | null;
+  trainingFocus: string | null;
+  visibility: string | null;
+  admissionOpen: boolean;
+  maxMembers: number | null;
+  maxGoalies: number | null;
   createdAt: string;
 };
 
@@ -82,11 +97,13 @@ export type MemberRouteActionData = {
 
 export type MemberProfileFieldOption = {
   id: string;
+  category?: string | null;
   name: string;
   label: string;
   type: string;
   options: string[];
   required: boolean;
+  onRegistrationForm?: boolean;
 };
 
 export type MemberCreateLoaderData = {
@@ -100,15 +117,6 @@ export type MemberDetailLoaderData = {
   contracts: Contract[];
   groups: MemberGroupOption[];
   roles: Role[];
-  membershipLevels?: Array<{
-    id: string;
-    name: string;
-    description: string | null;
-    color: string | null;
-    sortOrder: number | null;
-    isDefault: number | null;
-    assignedAt?: string | null;
-  }>;
   profileFields: MemberProfileFieldOption[];
   bankAccount: BankAccount | null;
 };

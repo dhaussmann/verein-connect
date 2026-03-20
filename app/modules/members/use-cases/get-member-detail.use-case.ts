@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { RouteEnv } from "@/core/runtime/route";
 import { bankAccounts, contracts, groups, membershipTypes, tarifs } from "@/core/db/schema";
@@ -25,22 +25,31 @@ export async function getMemberDetailUseCase(env: RouteEnv, input: { orgId: stri
     db.select().from(bankAccounts).where(and(eq(bankAccounts.orgId, input.orgId), eq(bankAccounts.userId, input.memberId))),
   ]);
 
-  const mappedContracts = await Promise.all(contractsRows.map(async (contract) => {
-    let typeName = "";
-    if (contract.membershipTypeId) {
-      const rows = await db.select({ name: membershipTypes.name }).from(membershipTypes).where(eq(membershipTypes.id, contract.membershipTypeId));
-      typeName = rows[0]?.name || "";
-    }
-    if (contract.tarifId) {
-      const rows = await db.select({ name: tarifs.name }).from(tarifs).where(eq(tarifs.id, contract.tarifId));
-      typeName = rows[0]?.name || "";
-    }
+  const membershipTypeIds = [...new Set(contractsRows.map((contract) => contract.membershipTypeId).filter((id): id is string => Boolean(id)))];
+  const tarifIds = [...new Set(contractsRows.map((contract) => contract.tarifId).filter((id): id is string => Boolean(id)))];
+  const groupIds = [...new Set(contractsRows.map((contract) => contract.groupId).filter((id): id is string => Boolean(id)))];
+  const [membershipTypeRows, tarifRows, groupRows] = await Promise.all([
+    membershipTypeIds.length > 0
+      ? db.select({ id: membershipTypes.id, name: membershipTypes.name }).from(membershipTypes).where(inArray(membershipTypes.id, membershipTypeIds))
+      : Promise.resolve([]),
+    tarifIds.length > 0
+      ? db.select({ id: tarifs.id, name: tarifs.name }).from(tarifs).where(inArray(tarifs.id, tarifIds))
+      : Promise.resolve([]),
+    groupIds.length > 0
+      ? db.select({ id: groups.id, name: groups.name }).from(groups).where(inArray(groups.id, groupIds))
+      : Promise.resolve([]),
+  ]);
+  const membershipTypeNames = new Map(membershipTypeRows.map((row) => [row.id, row.name]));
+  const tarifNames = new Map(tarifRows.map((row) => [row.id, row.name]));
+  const groupNames = new Map(groupRows.map((row) => [row.id, row.name]));
 
-    let groupName = "";
-    if (contract.groupId) {
-      const rows = await db.select({ name: groups.name }).from(groups).where(eq(groups.id, contract.groupId));
-      groupName = rows[0]?.name || "";
-    }
+  const mappedContracts = contractsRows.map((contract) => {
+    const typeName = contract.membershipTypeId
+      ? membershipTypeNames.get(contract.membershipTypeId) || ""
+      : contract.tarifId
+        ? tarifNames.get(contract.tarifId) || ""
+        : "";
+    const groupName = contract.groupId ? groupNames.get(contract.groupId) || "" : "";
 
     return {
       id: contract.id,
@@ -63,7 +72,7 @@ export async function getMemberDetailUseCase(env: RouteEnv, input: { orgId: stri
       cancellationEffectiveDate: contract.cancellationEffectiveDate,
       createdAt: contract.createdAt || "",
     };
-  }));
+  });
 
   const bankAccount = bankAccountRows[0]
     ? {

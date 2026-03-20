@@ -1,14 +1,12 @@
-import { and, asc, count, eq, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, like, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import {
   groupMembers,
   groups,
-  membershipLevels,
   profileFieldDefinitions,
   profileFieldValues,
   roles,
   userRoles,
-  userMembershipLevels,
   users,
 } from "@/core/db/schema";
 import type { RouteEnv } from "@/core/runtime/route";
@@ -23,6 +21,117 @@ export function membersRepository(env: RouteEnv) {
   return {
     async listUsersByOrg(orgId: string) {
       return db.select().from(users).where(eq(users.orgId, orgId)).orderBy(asc(users.lastName), asc(users.firstName));
+    },
+
+    async listUserIdsByRoleName(orgId: string, roleName: string) {
+      const rows = await db
+        .select({ userId: userRoles.userId })
+        .from(userRoles)
+        .innerJoin(roles, eq(userRoles.roleId, roles.id))
+        .where(and(eq(roles.orgId, orgId), eq(roles.name, roleName), eq(userRoles.status, "active")));
+      return rows.map((row) => row.userId);
+    },
+
+    async listUserIdsByGroupName(orgId: string, groupName: string) {
+      const rows = await db
+        .select({ userId: groupMembers.userId })
+        .from(groupMembers)
+        .innerJoin(groups, eq(groupMembers.groupId, groups.id))
+        .where(and(eq(groups.orgId, orgId), eq(groups.name, groupName)));
+      return rows.map((row) => row.userId);
+    },
+
+    async listUsersByOrgPage(input: {
+      orgId: string;
+      search?: string;
+      status?: string;
+      userIds?: string[];
+      sort?: string;
+      dir?: string;
+      limit: number;
+      offset: number;
+    }) {
+      const conditions = [eq(users.orgId, input.orgId)];
+
+      if (input.status && input.status !== "Alle") {
+        const reverseStatusMap: Record<string, string> = {
+          Aktiv: "active",
+          Inaktiv: "inactive",
+          Ausstehend: "pending",
+          blocked: "blocked",
+        };
+        conditions.push(eq(users.status, reverseStatusMap[input.status] || input.status.toLowerCase()));
+      }
+
+      if (input.search) {
+        const pattern = `%${input.search}%`;
+        conditions.push(or(
+          like(users.firstName, pattern),
+          like(users.lastName, pattern),
+          like(users.email, pattern),
+          like(users.memberNumber, pattern),
+        )!);
+      }
+
+      if (input.userIds) {
+        if (input.userIds.length === 0) return [];
+        conditions.push(inArray(users.id, input.userIds));
+      }
+
+      const baseQuery = db.select().from(users).where(and(...conditions)).limit(input.limit).offset(input.offset);
+      const isDesc = input.dir === "desc";
+      switch (input.sort) {
+        case "email":
+          return baseQuery.orderBy(isDesc ? desc(users.email) : asc(users.email));
+        case "memberNumber":
+          return baseQuery.orderBy(isDesc ? desc(users.memberNumber) : asc(users.memberNumber));
+        case "status":
+          return baseQuery.orderBy(isDesc ? desc(users.status) : asc(users.status));
+        case "joinDate":
+          return baseQuery.orderBy(isDesc ? desc(users.joinDate) : asc(users.joinDate));
+        default:
+          return baseQuery.orderBy(
+            isDesc ? desc(users.lastName) : asc(users.lastName),
+            isDesc ? desc(users.firstName) : asc(users.firstName),
+          );
+      }
+    },
+
+    async countUsersByOrgFiltered(input: {
+      orgId: string;
+      search?: string;
+      status?: string;
+      userIds?: string[];
+    }) {
+      const conditions = [eq(users.orgId, input.orgId)];
+
+      if (input.status && input.status !== "Alle") {
+        const reverseStatusMap: Record<string, string> = {
+          Aktiv: "active",
+          Inaktiv: "inactive",
+          Ausstehend: "pending",
+          blocked: "blocked",
+        };
+        conditions.push(eq(users.status, reverseStatusMap[input.status] || input.status.toLowerCase()));
+      }
+
+      if (input.search) {
+        const pattern = `%${input.search}%`;
+        conditions.push(or(
+          like(users.firstName, pattern),
+          like(users.lastName, pattern),
+          like(users.email, pattern),
+          like(users.memberNumber, pattern),
+        )!);
+      }
+
+      if (input.userIds) {
+        if (input.userIds.length === 0) return 0;
+        conditions.push(inArray(users.id, input.userIds));
+      }
+
+      const rows = await db.select({ count: count() }).from(users).where(and(...conditions));
+      return rows[0]?.count || 0;
     },
 
     async listActiveRolesForUser(userId: string) {
@@ -53,6 +162,7 @@ export function membersRepository(env: RouteEnv) {
           groupId: groups.id,
           groupName: groups.name,
           category: groups.category,
+          groupType: groups.groupType,
           memberRole: groupMembers.role,
         })
         .from(groupMembers)
@@ -68,6 +178,7 @@ export function membersRepository(env: RouteEnv) {
           groupId: groups.id,
           groupName: groups.name,
           category: groups.category,
+          groupType: groups.groupType,
           memberRole: groupMembers.role,
         })
         .from(groupMembers)
@@ -164,22 +275,8 @@ export function membersRepository(env: RouteEnv) {
       await db.insert(userRoles).values({ userId, roleId, status: "active" });
     },
 
-    async assignGroup(userId: string, groupId: string) {
-      await db.insert(groupMembers).values({ userId, groupId, role: "Mitglied" });
-    },
-
-    async listMembershipLevelsByOrg(orgId: string) {
-      return db.select().from(membershipLevels).where(eq(membershipLevels.orgId, orgId)).orderBy(asc(membershipLevels.sortOrder), asc(membershipLevels.name));
-    },
-
-    async listMembershipLevelsForUser(userId: string) {
-      return db
-        .select({
-          levelId: userMembershipLevels.levelId,
-          assignedAt: userMembershipLevels.assignedAt,
-        })
-        .from(userMembershipLevels)
-        .where(eq(userMembershipLevels.userId, userId));
+    async assignGroup(userId: string, groupId: string, role = "Mitglied") {
+      await db.insert(groupMembers).values({ userId, groupId, role });
     },
 
     async findProfileFieldByName(orgId: string, fieldName: string) {
