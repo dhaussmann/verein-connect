@@ -5,24 +5,14 @@ import {
   Scripts,
   ScrollRestoration,
 } from "react-router";
-import type { LoaderFunctionArgs } from "react-router";
+import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MantineProvider, createTheme } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
 import { ModalsProvider } from "@mantine/modals";
-import { getSessionTokens, getEnv } from "@/lib/session.server";
 import appCss from "./app.css?url";
-import type { AuthUser } from "@/lib/auth.server";
 
 export const links = () => [{ rel: "stylesheet", href: appCss }];
-
-export async function loader({ request, context }: LoaderFunctionArgs) {
-  const env = getEnv(context);
-  const { user } = await getSessionTokens(request, env.COOKIE_SECRET);
-  return { user: (user as AuthUser | null) ?? null };
-}
-
-export type RootLoaderData = Awaited<ReturnType<typeof loader>>;
 
 const mantineTheme = createTheme({
   fontFamily: "Inter, system-ui, sans-serif",
@@ -74,14 +64,6 @@ const mantineTheme = createTheme({
   },
 });
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30_000,
-    },
-  },
-});
-
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="de">
@@ -101,6 +83,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 30_000,
+          },
+        },
+      }),
+  );
+
   return (
     <MantineProvider theme={mantineTheme}>
       <Notifications position="top-right" />

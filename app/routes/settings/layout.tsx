@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs } from 'react-router';
-import { NavLink, Outlet, useLocation } from 'react-router';
+import { NavLink, Outlet, useMatches } from 'react-router';
 import { Card, Stack, Text } from '@mantine/core';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { requireRouteData } from '@/core/runtime/route';
@@ -20,8 +20,13 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   return null;
 }
 
+export const handle = {
+  breadcrumb: "Einstellungen",
+};
+
 export default function SettingsLayoutRoute() {
-  const location = useLocation();
+  const matches = useMatches();
+  const currentPath = matches[matches.length - 1]?.pathname ?? "/settings";
 
   return (
     <div>
@@ -33,8 +38,8 @@ export default function SettingsLayoutRoute() {
             {settingsNavItems.map((item) => {
               const isActive =
                 item.to === '/settings'
-                  ? location.pathname === '/settings'
-                  : location.pathname.startsWith(item.to);
+                  ? currentPath === '/settings'
+                  : currentPath.startsWith(item.to);
 
               return (
                 <NavLink

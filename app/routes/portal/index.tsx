@@ -1,10 +1,10 @@
-import { Link, useLoaderData, useRouteLoaderData } from 'react-router';
+import { Link, useLoaderData } from 'react-router';
 import type { LoaderFunctionArgs } from 'react-router';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, Badge, Button, Text, Group } from '@mantine/core';
 import { Calendar, GraduationCap, ClipboardCheck, MapPin, Clock, ChevronRight } from 'lucide-react';
-import type { RootLoaderData } from '@/root';
 import { requireRouteData } from '@/core/runtime/route';
+import { useCurrentUser } from '@/hooks/use-current-user';
 import { getPortalDashboardUseCase } from '@/modules/portal/use-cases/portal.use-cases';
 
 type PortalDashboardEvent = {
@@ -28,10 +28,14 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   return getPortalDashboardUseCase(env, user.id);
 }
 
+export const handle = {
+  breadcrumb: "Portal",
+};
+
 export default function PortalIndexRoute() {
   const loaderData = useLoaderData<typeof loader>() as { data: PortalDashboardData };
   const { data } = loaderData;
-  const { user } = (useRouteLoaderData('root') as RootLoaderData) ?? {};
+  const user = useCurrentUser();
 
   const roleLabel = (r: string) => {
     const map: Record<string, string> = { org_admin: 'Admin', trainer: 'Trainer', member: 'Mitglied' };

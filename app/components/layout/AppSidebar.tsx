@@ -1,5 +1,4 @@
-import { Link, useLocation, useRouteLoaderData, useFetcher } from "react-router";
-import type { RootLoaderData } from "@/root";
+import { NavLink, useFetcher, useMatches } from "react-router";
 import {
   LayoutDashboard, Users, UsersRound, GraduationCap, Calendar,
   ClipboardCheck, MessageSquare, Receipt,
@@ -8,8 +7,9 @@ import {
   ListChecks,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Badge } from '@mantine/core';
+import { useCurrentUser } from "@/hooks/use-current-user";
 
 interface NavItem {
   title: string;
@@ -54,25 +54,46 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: AppSidebarProps) {
-  const location = useLocation();
-  const { user } = (useRouteLoaderData("root") as RootLoaderData) ?? {};
+  const user = useCurrentUser();
+  const matches = useMatches();
   const logoutFetcher = useFetcher();
+  const currentPath = matches[matches.length - 1]?.pathname ?? "/";
 
   const isChildActive = (item: NavItem) =>
-    item.children?.some(c => location.pathname === c.path || location.pathname.startsWith(c.path + '/'));
+    item.children?.some((child) => currentPath === child.path || currentPath.startsWith(child.path + "/"));
 
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     adminNavItems.forEach(item => {
       if (item.children) {
         const childPaths = item.children.map(c => c.path);
-        if (childPaths.some(p => location.pathname === p || location.pathname.startsWith(p + '/'))) {
+        if (childPaths.some((path) => currentPath === path || currentPath.startsWith(path + "/"))) {
           initial[item.path] = true;
         }
       }
     });
     return initial;
   });
+
+  useEffect(() => {
+    setOpenMenus((prev) => {
+      const next = { ...prev };
+
+      adminNavItems.forEach((item) => {
+        if (!item.children) return;
+
+        const shouldBeOpen = item.children.some(
+          (child) => currentPath === child.path || currentPath.startsWith(child.path + "/"),
+        );
+
+        if (shouldBeOpen) {
+          next[item.path] = true;
+        }
+      });
+
+      return next;
+    });
+  }, [currentPath]);
 
   const toggleMenu = (path: string) =>
     setOpenMenus(prev => ({ ...prev, [path]: !prev[path] }));
@@ -87,7 +108,7 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: A
     const hasChildren = !!item.children?.length;
     const isOpen = !!openMenus[item.path];
     const childActive = hasChildren && isChildActive(item);
-    const isActive = !hasChildren && (location.pathname === item.path || location.pathname.startsWith(item.path + '/'));
+    const isActive = !hasChildren && (currentPath === item.path || currentPath.startsWith(item.path + "/"));
 
     if (hasChildren) {
       return (
@@ -116,23 +137,25 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: A
           {!collapsed && isOpen && (
             <div className="ml-4 border-l border-border">
               {item.children!.map(child => {
-                const isChildItemActive = location.pathname === child.path
-                  || (location.pathname.startsWith(child.path + '/') && child.path !== '/contracts');
+                const isChildItemActive = currentPath === child.path
+                  || (currentPath.startsWith(child.path + '/') && child.path !== '/contracts');
                 return (
-                  <Link
+                  <NavLink
                     key={child.path}
                     to={child.path}
-                    className={cn(
-                      'w-full flex items-center gap-3 pl-4 pr-4 py-2 text-sm transition-colors duration-150 relative',
-                      isChildItemActive
-                        ? 'bg-accent text-accent-foreground font-medium'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                    )}
+                    className={() =>
+                      cn(
+                        'w-full flex items-center gap-3 pl-4 pr-4 py-2 text-sm transition-colors duration-150 relative',
+                        isChildItemActive
+                          ? 'bg-accent text-accent-foreground font-medium'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                      )
+                    }
                     onClick={onMobileClose}
                   >
                     <child.icon className="h-4 w-4 shrink-0" />
                     <span>{child.title}</span>
-                  </Link>
+                  </NavLink>
                 );
               })}
             </div>
@@ -142,24 +165,26 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: A
     }
 
     return (
-      <Link
+      <NavLink
         key={item.path}
         to={item.path}
         onClick={onMobileClose}
-        className={cn(
-          'w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors duration-150 relative',
-          isActive
-            ? 'bg-accent text-accent-foreground font-medium'
-            : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-          collapsed && 'justify-center px-0'
-        )}
+        className={() =>
+          cn(
+            'w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors duration-150 relative',
+            isActive
+              ? 'bg-accent text-accent-foreground font-medium'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+            collapsed && 'justify-center px-0'
+          )
+        }
       >
         {isActive && (
           <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r" />
         )}
         <item.icon className={cn('h-5 w-5 shrink-0', collapsed ? '' : 'ml-1')} />
         {!collapsed && <span>{item.title}</span>}
-      </Link>
+      </NavLink>
     );
   };
 

@@ -1,37 +1,46 @@
 import { Bell, Menu as MenuIcon, Search, ChevronRight, User, LogOut, Building2 } from 'lucide-react';
-import { Link, useLocation, useRouteLoaderData, useFetcher } from "react-router";
-import type { RootLoaderData } from "@/root";
+import { Link, useFetcher, useMatches } from "react-router";
 import { ActionIcon, Badge, Menu, Modal, TextInput } from '@mantine/core';
 import { useState, useEffect, useCallback } from 'react';
+import { useCurrentUser } from "@/hooks/use-current-user";
 
-const breadcrumbMap: Record<string, string> = {
-  dashboard: 'Dashboard',
-  members: 'Mitglieder',
-  courses: 'Kurse',
-  events: 'Termine',
-  attendance: 'Anwesenheit',
-  communication: 'Kommunikation',
-  finance: 'Finanzen',
-  settings: 'Einstellungen',
-  new: 'Neu',
-  email: 'E-Mail',
-  accounting: 'Buchhaltung',
-  roles: 'Rollen',
-  fields: 'Profilfelder',
+type BreadcrumbHandle = {
+  breadcrumb?: string;
 };
+
+type RouteMatch = {
+  id: string;
+  pathname: string;
+  handle?: BreadcrumbHandle;
+};
+
+function humanizeSegment(segment: string) {
+  return segment
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
 
 interface TopbarProps {
   onMobileMenuOpen: () => void;
 }
 
 export function Topbar({ onMobileMenuOpen }: TopbarProps) {
-  const location = useLocation();
-  const { user } = (useRouteLoaderData("root") as RootLoaderData) ?? {};
+  const user = useCurrentUser();
+  const matches = useMatches() as RouteMatch[];
   const logoutFetcher = useFetcher();
   const [searchOpen, setSearchOpen] = useState(false);
 
-  const segments = location.pathname.split('/').filter(Boolean);
-  const crumbs = segments.map((seg) => breadcrumbMap[seg] || seg);
+  const crumbs = matches
+    .filter((match) => match.id !== "root")
+    .map((match) => {
+      if (match.handle?.breadcrumb) {
+        return match.handle.breadcrumb;
+      }
+
+      const segments = match.pathname.split("/").filter(Boolean);
+      return humanizeSegment(segments[segments.length - 1] || "");
+    })
+    .filter(Boolean);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
