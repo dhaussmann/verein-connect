@@ -8,10 +8,19 @@ export const organizations = sqliteTable('organizations', {
   slug: text('slug').notNull().unique(),
   logoUrl: text('logo_url'),
   settings: text('settings').default('{}'),
-  plan: text('plan').default('free'),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
   updatedAt: text('updated_at').default(sql`(datetime('now'))`),
 });
+
+export const dbCounters = sqliteTable('db_counters', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  orgId: text('org_id').notNull().references(() => organizations.id),
+  scope: text('scope').notNull(),
+  value: integer('value').notNull().default(0),
+  updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+}, (table) => ([
+  uniqueIndex('idx_db_counters_org_scope').on(table.orgId, table.scope),
+]));
 
 // ─── Users ───────────────────────────────────────────────────────────────────
 export const users = sqliteTable('users', {
@@ -19,6 +28,7 @@ export const users = sqliteTable('users', {
   orgId: text('org_id').notNull().references(() => organizations.id),
   email: text('email').notNull(),
   passwordHash: text('password_hash'),
+  emailVerified: integer('email_verified', { mode: 'boolean' }).notNull().default(true),
   firstName: text('first_name').notNull(),
   lastName: text('last_name').notNull(),
   displayName: text('display_name'),
@@ -33,7 +43,6 @@ export const users = sqliteTable('users', {
   zip: text('zip'),
   city: text('city'),
   joinDate: text('join_date'),
-  membershipLevelId: text('membership_level_id'),
   qrCode: text('qr_code').$defaultFn(() => crypto.randomUUID()),
   lastLogin: text('last_login'),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
@@ -45,28 +54,49 @@ export const users = sqliteTable('users', {
   index('idx_users_qr').on(table.qrCode),
 ]));
 
-// ─── Membership Levels ──────────────────────────────────────────────────────
-export const membershipLevels = sqliteTable('membership_levels', {
+export const authAccounts = sqliteTable('auth_accounts', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  orgId: text('org_id').notNull().references(() => organizations.id),
-  name: text('name').notNull(),
-  description: text('description'),
-  color: text('color').default('#3b82f6'),
-  sortOrder: integer('sort_order').default(0),
-  isDefault: integer('is_default').default(0),
-  createdAt: text('created_at').default(sql`(datetime('now'))`),
+  accountId: text('account_id').notNull(),
+  providerId: text('provider_id').notNull(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  passwordHash: text('password_hash'),
+  accessToken: text('access_token'),
+  refreshToken: text('refresh_token'),
+  idToken: text('id_token'),
+  accessTokenExpiresAt: integer('access_token_expires_at', { mode: 'timestamp_ms' }),
+  refreshTokenExpiresAt: integer('refresh_token_expires_at', { mode: 'timestamp_ms' }),
+  scope: text('scope'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
 }, (table) => ([
-  uniqueIndex('idx_ml_org_name').on(table.orgId, table.name),
+  uniqueIndex('idx_auth_accounts_provider_account').on(table.providerId, table.accountId),
+  index('idx_auth_accounts_user').on(table.userId),
 ]));
 
-export const userMembershipLevels = sqliteTable('user_membership_levels', {
+export const authSessions = sqliteTable('auth_sessions', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  userId: text('user_id').notNull().references(() => users.id),
-  levelId: text('level_id').notNull().references(() => membershipLevels.id),
-  assignedAt: text('assigned_at').default(sql`(datetime('now'))`),
+  token: text('token').notNull(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+  ipAddress: text('ip_address'),
+  userAgent: text('user_agent'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
 }, (table) => ([
-  uniqueIndex('idx_uml_user_level').on(table.userId, table.levelId),
-  index('idx_uml_level').on(table.levelId),
+  uniqueIndex('idx_auth_sessions_token').on(table.token),
+  index('idx_auth_sessions_user').on(table.userId),
+  index('idx_auth_sessions_expires').on(table.expiresAt),
+]));
+
+export const authVerifications = sqliteTable('auth_verifications', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  identifier: text('identifier').notNull(),
+  value: text('value').notNull(),
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+}, (table) => ([
+  index('idx_auth_verifications_identifier').on(table.identifier),
 ]));
 
 // ─── Profile Field Definitions (EAV) ────────────────────────────────────────
@@ -113,6 +143,9 @@ export const roles = sqliteTable('roles', {
   name: text('name').notNull(),
   description: text('description'),
   category: text('category').default('general'),
+  roleType: text('role_type').default('staff'),
+  scope: text('scope').default('club'),
+  isAssignable: integer('is_assignable').default(1),
   isSystem: integer('is_system').default(0),
   maxMembers: integer('max_members'),
   permissions: text('permissions').default('[]'),
@@ -226,14 +259,18 @@ export const eventOccurrences = sqliteTable('event_occurrences', {
   notes: text('notes'),
 }, (table) => ([
   index('idx_eo_event').on(table.eventId, table.startDate),
+  index('idx_eo_start').on(table.startDate),
 ]));
 
-// ─── Event Target Roles ──────────────────────────────────────────────────────
-export const eventTargetRoles = sqliteTable('event_target_roles', {
+// ─── Event Target Groups ─────────────────────────────────────────────────────
+export const eventTargetGroups = sqliteTable('event_target_groups', {
   eventId: text('event_id').notNull().references(() => events.id, { onDelete: 'cascade' }),
-  roleId: text('role_id').notNull().references(() => roles.id, { onDelete: 'cascade' }),
-  maxFromRole: integer('max_from_role'),
-});
+  groupId: text('group_id').notNull().references(() => groups.id, { onDelete: 'cascade' }),
+  maxFromGroup: integer('max_from_group'),
+}, (table) => ([
+  uniqueIndex('idx_etg_event_group').on(table.eventId, table.groupId),
+  index('idx_etg_event').on(table.eventId),
+]));
 
 // ─── Event Registrations ─────────────────────────────────────────────────────
 export const eventRegistrations = sqliteTable('event_registrations', {
@@ -259,7 +296,10 @@ export const eventLeaders = sqliteTable('event_leaders', {
   userId: text('user_id').notNull().references(() => users.id),
   roleLabel: text('role_label').default('Trainer'),
   showOnRegistration: integer('show_on_registration').default(1),
-});
+}, (table) => ([
+  uniqueIndex('idx_el_event_user').on(table.eventId, table.userId),
+  index('idx_el_event').on(table.eventId),
+]));
 
 // ─── Attendance ──────────────────────────────────────────────────────────────
 export const attendance = sqliteTable('attendance', {
@@ -292,7 +332,11 @@ export const messages = sqliteTable('messages', {
   scheduledAt: text('scheduled_at'),
   sentAt: text('sent_at'),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
-});
+}, (table) => ([
+  index('idx_messages_org_created').on(table.orgId, table.createdAt),
+  index('idx_messages_org_status_created').on(table.orgId, table.status, table.createdAt),
+  index('idx_messages_org_channel_created').on(table.orgId, table.channel, table.createdAt),
+]));
 
 export const messageRecipients = sqliteTable('message_recipients', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -301,7 +345,9 @@ export const messageRecipients = sqliteTable('message_recipients', {
   recipientId: text('recipient_id'),
   deliveryStatus: text('delivery_status').default('pending'),
   deliveredAt: text('delivered_at'),
-});
+}, (table) => ([
+  index('idx_message_recipients_message').on(table.messageId),
+]));
 
 export const messageTemplates = sqliteTable('message_templates', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -312,7 +358,9 @@ export const messageTemplates = sqliteTable('message_templates', {
   body: text('body').notNull(),
   signature: text('signature'),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
-});
+}, (table) => ([
+  index('idx_message_templates_org_created').on(table.orgId, table.createdAt),
+]));
 
 // ─── Invoices ────────────────────────────────────────────────────────────────
 export const invoices = sqliteTable('invoices', {
@@ -338,6 +386,9 @@ export const invoices = sqliteTable('invoices', {
 }, (table) => ([
   uniqueIndex('idx_inv_org_number').on(table.orgId, table.invoiceNumber),
   index('idx_inv_contract').on(table.contractId),
+  index('idx_inv_org_created').on(table.orgId, table.createdAt),
+  index('idx_inv_org_status_created').on(table.orgId, table.status, table.createdAt),
+  index('idx_inv_user_created').on(table.userId, table.createdAt),
 ]));
 
 export const invoiceItems = sqliteTable('invoice_items', {
@@ -349,7 +400,9 @@ export const invoiceItems = sqliteTable('invoice_items', {
   total: real('total').notNull(),
   eventId: text('event_id').references(() => events.id),
   sortOrder: integer('sort_order').default(0),
-});
+}, (table) => ([
+  index('idx_invoice_items_invoice_sort').on(table.invoiceId, table.sortOrder),
+]));
 
 // ─── Accounting ──────────────────────────────────────────────────────────────
 export const accountingEntries = sqliteTable('accounting_entries', {
@@ -365,7 +418,10 @@ export const accountingEntries = sqliteTable('accounting_entries', {
   receiptUrl: text('receipt_url'),
   createdBy: text('created_by').references(() => users.id),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
-});
+}, (table) => ([
+  index('idx_ae_org_entry_date').on(table.orgId, table.entryDate),
+  index('idx_ae_invoice').on(table.invoiceId),
+]));
 
 // ─── Saved Filters ───────────────────────────────────────────────────────────
 export const savedFilters = sqliteTable('saved_filters', {
@@ -392,7 +448,10 @@ export const auditLog = sqliteTable('audit_log', {
   details: text('details'),
   ipAddress: text('ip_address'),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
-});
+}, (table) => ([
+  index('idx_audit_org_created').on(table.orgId, table.createdAt),
+  index('idx_audit_user_created').on(table.userId, table.createdAt),
+]));
 
 // ─── Groups (Vertragsgruppen) ───────────────────────────────────────────────
 export const groups = sqliteTable('groups', {
@@ -401,6 +460,17 @@ export const groups = sqliteTable('groups', {
   name: text('name').notNull(),
   description: text('description'),
   category: text('category').default('standard'),
+  groupType: text('group_type').default('standard'),
+  ageBand: text('age_band'),
+  genderScope: text('gender_scope').default('mixed'),
+  season: text('season'),
+  league: text('league'),
+  location: text('location'),
+  trainingFocus: text('training_focus'),
+  visibility: text('visibility').default('internal'),
+  admissionOpen: integer('admission_open').default(1),
+  maxMembers: integer('max_members'),
+  maxGoalies: integer('max_goalies'),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
 }, (table) => ([
   uniqueIndex('idx_groups_org_name').on(table.orgId, table.name),
@@ -438,7 +508,7 @@ export const membershipTypes = sqliteTable('membership_types', {
   cancellationNoticeDays: integer('cancellation_notice_days').default(30),
   cancellationNoticeBasis: text('cancellation_notice_basis').default('FROM_CANCELLATION'),
   renewalCancellationDays: integer('renewal_cancellation_days'),
-  defaultGroupId: text('default_group_id').references(() => groups.id),
+  applicationRequirements: text('application_requirements').default('[]'),
   isFamilyTarif: integer('is_family_tarif').default(0),
   minFamilyMembers: integer('min_family_members').default(3),
   sortOrder: integer('sort_order').default(0),
@@ -468,7 +538,7 @@ export const tarifs = sqliteTable('tarifs', {
   cancellationNoticeDays: integer('cancellation_notice_days').default(30),
   cancellationNoticeBasis: text('cancellation_notice_basis').default('FROM_CANCELLATION'),
   renewalCancellationDays: integer('renewal_cancellation_days'),
-  defaultGroupId: text('default_group_id').references(() => groups.id),
+  applicationRequirements: text('application_requirements').default('[]'),
   allowedMembershipTypeIds: text('allowed_membership_type_ids').default('[]'),
   sortOrder: integer('sort_order').default(0),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
@@ -488,6 +558,7 @@ export const tarifPricing = sqliteTable('tarif_pricing', {
   membershipTypeId: text('membership_type_id'),
 }, (table) => ([
   uniqueIndex('idx_tp_unique').on(table.parentId, table.parentType, table.billingPeriod, table.membershipTypeId),
+  index('idx_tp_parent_period').on(table.parentId, table.parentType, table.billingPeriod),
 ]));
 
 // ─── Discount Groups (Rabattgruppen) ────────────────────────────────────────
@@ -549,6 +620,10 @@ export const contracts = sqliteTable('contracts', {
   index('idx_contracts_member').on(table.memberId),
   index('idx_contracts_status').on(table.orgId, table.status),
   index('idx_contracts_parent').on(table.parentContractId),
+  index('idx_contracts_org_member').on(table.orgId, table.memberId),
+  index('idx_contracts_org_group').on(table.orgId, table.groupId),
+  index('idx_contracts_org_created').on(table.orgId, table.createdAt),
+  index('idx_contracts_org_status_paid').on(table.orgId, table.status, table.paidUntil),
 ]));
 
 // ─── Contract Pauses (Vertragspausen) ───────────────────────────────────────
@@ -560,7 +635,9 @@ export const contractPauses = sqliteTable('contract_pauses', {
   reason: text('reason'),
   creditAmount: real('credit_amount').default(0),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
-});
+}, (table) => ([
+  index('idx_contract_pauses_contract_dates').on(table.contractId, table.pauseFrom, table.pauseUntil),
+]));
 
 // ─── Contract Applications (Selbstregistrierungs-Anträge) ───────────────────
 export const contractApplications = sqliteTable('contract_applications', {
@@ -582,7 +659,10 @@ export const contractApplications = sqliteTable('contract_applications', {
   reviewedBy: text('reviewed_by').references(() => users.id),
   reviewedAt: text('reviewed_at'),
   reviewNotes: text('review_notes'),
-});
+}, (table) => ([
+  index('idx_ca_org_status_submitted').on(table.orgId, table.status, table.submittedAt),
+  index('idx_ca_org_submitted').on(table.orgId, table.submittedAt),
+]));
 
 // ─── Contract Settings (Org-weite Vertragseinstellungen) ────────────────────
 export const contractSettings = sqliteTable('contract_settings', {
