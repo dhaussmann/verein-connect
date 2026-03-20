@@ -8,7 +8,7 @@ import { Button, Card, Badge, Text, Group, Stack, Popover } from '@mantine/core'
 import { Plus, ChevronLeft, ChevronRight, CalendarDays, List, Clock, MapPin, Users } from 'lucide-react';
 import { requireRouteData } from '@/core/runtime/route';
 import { listCalendarEventsUseCase } from '@/modules/events/use-cases/events.use-cases';
-import type { CalendarEvent } from '@/lib/api';
+import type { CalendarEvent } from '@/core/types/api';
 
 const categoryBgClasses: Record<string, string> = {
   Training: 'bg-primary text-primary-foreground',

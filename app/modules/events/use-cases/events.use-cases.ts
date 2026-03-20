@@ -1,6 +1,6 @@
 import { and, asc, count, desc, eq, gte, inArray, like, lte, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import type { Event, CalendarEvent } from "@/lib/api";
+import type { Event, CalendarEvent } from "@/core/types/api";
 import type { RouteEnv } from "@/core/runtime/route";
 import { writeAuditLog } from "@/core/lib/audit";
 import { buildMeta, parsePagination } from "@/core/lib/pagination";

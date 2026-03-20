@@ -1,4 +1,4 @@
-import type { BankAccount, Contract, Role } from "@/lib/api";
+import type { BankAccount, Contract, Role } from "@/core/types/api";
 
 export type MemberListSortKey = "name" | "email" | "memberNumber" | "status" | "joinDate";
 

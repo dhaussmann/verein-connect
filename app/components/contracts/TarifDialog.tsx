@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Tarif, MembershipType, TarifPricing } from '@/lib/api';
+import type { Tarif, MembershipType, TarifPricing } from '@/core/types/api';
 import { applicationRequirementOptions } from '@/modules/contracts/application-requirements';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import {

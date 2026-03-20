@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
-import { sendBetterAuthRequest } from "@/lib/better-auth.server";
-import { getEnv } from "@/lib/session.server";
+import { sendBetterAuthRequest } from "@/core/auth/better-auth.server";
+import { getEnv } from "@/core/auth/session.server";
 
 export async function action({ request, context }: ActionFunctionArgs) {
   const env = getEnv(context as Parameters<typeof getEnv>[0]);

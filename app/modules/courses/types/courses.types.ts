@@ -1,1 +1,1 @@
-export type { Event } from "@/lib/api";
+export type { Event } from "@/core/types/api";

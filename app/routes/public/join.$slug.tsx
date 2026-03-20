@@ -4,7 +4,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { Alert, Badge, Button, Card, Checkbox, Group, Select, Stack, Text, TextInput, Textarea } from "@mantine/core";
 import { z } from "zod";
 import { getRouteEnv } from "@/core/runtime/route";
-import { getFirstFieldError } from "@/lib/forms";
+import { getFirstFieldError } from "@/core/lib/forms";
 import { getHockeyAgeBand, getSuggestedGroupIdsForAgeBand, isMinorByBirthDate } from "@/modules/hockey/age-band";
 import { groupMemberRoleOptions } from "@/modules/hockey/hockey-options";
 import { getPublicApplicationFormUseCase, submitPublicApplicationUseCase } from "@/modules/applications/use-cases/applications.use-cases";

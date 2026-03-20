@@ -1,5 +1,5 @@
 import { useMatches } from "react-router";
-import type { AuthUser } from "@/lib/auth.server";
+import type { AuthUser } from "@/core/auth/auth.server";
 
 type MatchWithUser = {
   data?: {

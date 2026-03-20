@@ -3,7 +3,7 @@ import type { LoaderFunctionArgs } from 'react-router';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button, Card, Badge, Text, Group, Stack } from '@mantine/core';
 import { ArrowLeft, Clock, MapPin, Users, Edit } from 'lucide-react';
-import type { Event } from '@/lib/api';
+import type { Event } from '@/core/types/api';
 import { requireRouteData } from '@/core/runtime/route';
 import { getEventDetailUseCase } from '@/modules/events/use-cases/events.use-cases';
 

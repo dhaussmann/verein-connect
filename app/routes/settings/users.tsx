@@ -17,7 +17,7 @@ import {
 } from '@mantine/core';
 import { Search, UserPlus, Users } from 'lucide-react';
 import { createUserFormSchema } from '@/core/schemas/forms';
-import { getFirstFieldError } from '@/lib/forms';
+import { getFirstFieldError } from '@/core/lib/forms';
 import { requireRouteData } from '@/core/runtime/route';
 import {
   createSettingsUserUseCase,

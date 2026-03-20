@@ -19,10 +19,10 @@ import { AlertTriangle, CheckCircle, FileDown, Mail, MoreHorizontal, Plus, Recei
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RoutePendingOverlay } from "@/components/ui/route-pending-overlay";
 import { useRoutePending } from "@/hooks/use-route-pending";
-import { buildSearchParams } from "@/lib/search-params";
+import { buildSearchParams } from "@/core/lib/search-params";
 import { requireRouteData } from "@/core/runtime/route";
 import { deleteInvoiceUseCase, getInvoicesDataUseCase, markInvoicePaidUseCase } from "@/modules/finance/use-cases/finance.use-cases";
-import type { Invoice } from "@/lib/api";
+import type { Invoice } from "@/core/types/api";
 import { FinanceTabs } from "@/components/finance/FinanceTabs";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {

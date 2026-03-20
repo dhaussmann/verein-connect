@@ -1,4 +1,4 @@
-import type { AccountingEntry, Invoice } from "@/lib/api";
+import type { AccountingEntry, Invoice } from "@/core/types/api";
 import { writeAuditLog } from "@/core/lib/audit";
 import type { RouteEnv } from "@/core/runtime/route";
 import { financeRepository } from "../repository/finance.repository";

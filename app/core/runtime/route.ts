@@ -1,5 +1,5 @@
-import { requireAuth } from "@/lib/auth.server";
-import { getEnv, type Env } from "@/lib/session.server";
+import { requireAuth } from "@/core/auth/auth.server";
+import { getEnv, type Env } from "@/core/auth/session.server";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
 type RouteContext = LoaderFunctionArgs["context"] | ActionFunctionArgs["context"];

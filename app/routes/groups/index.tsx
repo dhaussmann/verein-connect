@@ -7,7 +7,7 @@ import {
 } from "@mantine/core";
 import { Plus, MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { getFirstFieldError } from "@/lib/forms";
+import { getFirstFieldError } from "@/core/lib/forms";
 import { requireRouteData } from "@/core/runtime/route";
 import { groupGenderOptions, groupTypeOptions, groupVisibilityOptions, hockeyAgeBandOptions } from "@/modules/hockey/hockey-options";
 import { listGroupsUseCase } from "@/modules/groups/use-cases/list-groups.use-case";

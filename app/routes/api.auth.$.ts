@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { getBetterAuth } from "@/lib/better-auth.server";
-import { getEnv } from "@/lib/session.server";
+import { getBetterAuth } from "@/core/auth/better-auth.server";
+import { getEnv } from "@/core/auth/session.server";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const env = getEnv(context as Parameters<typeof getEnv>[0]);

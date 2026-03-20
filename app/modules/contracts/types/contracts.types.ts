@@ -8,4 +8,4 @@ export type {
   MembershipType,
   PaginatedResponse,
   Tarif,
-} from "@/lib/api";
+} from "@/core/types/api";

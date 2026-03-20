@@ -1,4 +1,4 @@
-import type { AuthUser } from "@/lib/auth.server";
+import type { AuthUser } from "@/core/auth/auth.server";
 
 export function hasPermission(user: Pick<AuthUser, "permissions">, permission: string) {
   return user.permissions.includes("*")

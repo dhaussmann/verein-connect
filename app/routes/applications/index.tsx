@@ -6,8 +6,8 @@ import {
   Badge, Button, ActionIcon, Card, Group, Stack, Text, Select, Modal, Textarea,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import type { ContractApplication, PaginatedResponse } from '@/lib/api';
-import { buildSearchParams } from '@/lib/search-params';
+import type { ContractApplication, PaginatedResponse } from '@/core/types/api';
+import { buildSearchParams } from '@/core/lib/search-params';
 import { requireRouteData } from '@/core/runtime/route';
 import { acceptApplicationUseCase, listApplicationsUseCase, rejectApplicationUseCase } from '@/modules/applications/use-cases/applications.use-cases';
 

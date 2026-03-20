@@ -6,7 +6,7 @@ import { Button, Card, Select, Checkbox, Divider, TextInput, Group, Text, Stack,
 import { Calendar as CalIcon, Upload } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { requireRouteData } from "@/core/runtime/route";
-import { getFirstFieldError } from "@/lib/forms";
+import { getFirstFieldError } from "@/core/lib/forms";
 import { getMemberFormOptionsUseCase } from "@/modules/members/use-cases/get-member-form-options.use-case";
 import { createMemberUseCase } from "@/modules/members/use-cases/create-member.use-case";
 import { createMemberFormSchema } from "@/modules/members/schemas/create-member.schema";

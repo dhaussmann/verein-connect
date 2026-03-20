@@ -6,7 +6,7 @@ import {
   User, BookOpen, FileText, ClipboardList, CreditCard, SlidersHorizontal,
   ListChecks,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/core/lib/utils';
 import { useEffect, useState } from 'react';
 import { Badge } from '@mantine/core';
 import { useCurrentUser } from "@/hooks/use-current-user";

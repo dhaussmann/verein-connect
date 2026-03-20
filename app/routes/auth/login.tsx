@@ -4,10 +4,10 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 import { Button, Card, TextInput, Text, Anchor } from "@mantine/core";
 import { Eye, EyeOff } from "lucide-react";
-import { getAuthenticatedHomePath, requireAnonymous } from "@/lib/auth.server";
+import { getAuthenticatedHomePath, requireAnonymous } from "@/core/auth/auth.server";
 import { getSessionUserById } from "@/core/auth/auth.service";
-import { sendBetterAuthRequest } from "@/lib/better-auth.server";
-import { getEnv } from "@/lib/session.server";
+import { sendBetterAuthRequest } from "@/core/auth/better-auth.server";
+import { getEnv } from "@/core/auth/session.server";
 import { loginFormSchema } from "@/core/schemas/auth";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {

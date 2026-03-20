@@ -3,8 +3,8 @@ import { Link, Form, useActionData } from "react-router";
 import type { ActionFunctionArgs } from "react-router";
 import { Button, Card, TextInput, Text, Anchor } from "@mantine/core";
 import { ArrowLeft, Mail } from "lucide-react";
-import { sendBetterAuthRequest } from "@/lib/better-auth.server";
-import { getEnv } from "@/lib/session.server";
+import { sendBetterAuthRequest } from "@/core/auth/better-auth.server";
+import { getEnv } from "@/core/auth/session.server";
 import { forgotPasswordFormSchema } from "@/core/schemas/auth";
 
 export async function action({ request, context }: ActionFunctionArgs) {

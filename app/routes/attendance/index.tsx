@@ -6,7 +6,7 @@ import { Card, Button, Badge, Select, Progress, Text, Group } from '@mantine/cor
 import { Clock, MapPin } from 'lucide-react';
 import { RoutePendingOverlay } from '@/components/ui/route-pending-overlay';
 import { useRoutePending } from '@/hooks/use-route-pending';
-import { buildSearchParams } from '@/lib/search-params';
+import { buildSearchParams } from '@/core/lib/search-params';
 import { requireRouteData } from '@/core/runtime/route';
 import { listAttendanceEventsUseCase } from '@/modules/attendance/use-cases/attendance.use-cases';
 

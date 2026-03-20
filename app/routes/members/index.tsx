@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { DebouncedSearchInput } from "@/components/ui/debounced-search-input";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { buildSearchParams } from "@/lib/search-params";
+import { buildSearchParams } from "@/core/lib/search-params";
 import { requireRouteData } from "@/core/runtime/route";
 import { listMembersUseCase } from "@/modules/members/use-cases/list-members.use-case";
 import { changeMemberStatusUseCase } from "@/modules/members/use-cases/change-member-status.use-case";

@@ -7,7 +7,7 @@ import {
 import { Plus, Search, LayoutGrid, List, Clock, MapPin, Users, AlertCircle } from 'lucide-react';
 import { RoutePendingOverlay } from '@/components/ui/route-pending-overlay';
 import { useRoutePending } from '@/hooks/use-route-pending';
-import { buildSearchParams } from '@/lib/search-params';
+import { buildSearchParams } from '@/core/lib/search-params';
 import type { Event } from '@/modules/courses/types/courses.types';
 import { requireRouteData } from '@/core/runtime/route';
 import { listEventsUseCase } from '@/modules/events/use-cases/events.use-cases';

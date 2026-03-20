@@ -3,7 +3,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { ActionIcon, Badge, Button, Card, Group, Menu, Select, Table, Text } from "@mantine/core";
 import { Copy, Eye, Mail, MoreHorizontal, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { buildSearchParams } from "@/lib/search-params";
+import { buildSearchParams } from "@/core/lib/search-params";
 import { requireRouteData } from "@/core/runtime/route";
 import { deleteMessageUseCase, duplicateMessageUseCase, getMessagesDataUseCase, sendMessageUseCase } from "@/modules/communication/use-cases/communication.use-cases";
 import { CommunicationTabs } from "@/components/communication/CommunicationTabs";
