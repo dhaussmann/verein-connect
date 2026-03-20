@@ -1,3 +1,4 @@
+import { format, addDays } from 'date-fns';
 import type { Env } from "../types/bindings";
 
 export const SCHEDULED_JOBS = {
@@ -25,7 +26,7 @@ export function resolveScheduledCron(value: string): SupportedCron {
 
 export async function runScheduledJob(env: Pick<Env, "DB">, cron: SupportedCron) {
   if (cron === SCHEDULED_JOBS.weekly_overdue) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = format(new Date(), 'yyyy-MM-dd');
     await env.DB.prepare(
       "UPDATE invoices SET status = 'overdue' WHERE status = 'sent' AND due_date < ?",
     ).bind(today).run();
@@ -43,9 +44,7 @@ export async function runScheduledJob(env: Pick<Env, "DB">, cron: SupportedCron)
       ) || ' days') < datetime('now')
     `).run();
 
-    const thirtyDaysFromNow = new Date();
-    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-    const cutoff = thirtyDaysFromNow.toISOString().slice(0, 10);
+    const cutoff = format(addDays(new Date(), 30), 'yyyy-MM-dd');
 
     await env.DB.prepare(`
       UPDATE contracts SET
@@ -63,7 +62,7 @@ export async function runScheduledJob(env: Pick<Env, "DB">, cron: SupportedCron)
   }
 
   if (cron === SCHEDULED_JOBS.daily_expiration) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = format(new Date(), 'yyyy-MM-dd');
 
     await env.DB.prepare(`
       UPDATE contracts SET status = 'CANCELLED', updated_at = datetime('now')

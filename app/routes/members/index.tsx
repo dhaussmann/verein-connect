@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Form, Link, useFetcher, useLoaderData, useSearchParams } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { Button, Card, Badge, TextInput, Select, Checkbox, Table, Modal, Group, Text, Menu } from "@mantine/core";
 import {
-  Plus, Search, Filter, MoreHorizontal, Download, ChevronUp, ChevronDown,
+  Plus, Filter, MoreHorizontal, Download, ChevronUp, ChevronDown,
   Pencil, MessageSquare, UserMinus, Star, Save, ChevronLeft, ChevronRight,
   Users, Send, Receipt, FileSpreadsheet,
 } from "lucide-react";
+import { DebouncedSearchInput } from "@/components/ui/debounced-search-input";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { buildSearchParams } from "@/lib/search-params";
 import { requireRouteData } from "@/core/runtime/route";
@@ -140,13 +141,13 @@ export default function MembersListRoute() {
       <Card shadow="sm" className="bg-popover">
         <div className="p-4">
           <div className="flex flex-wrap gap-2 mb-4">
-            <div className="relative flex-1 min-w-[200px]">
-              <MemberSearchInput
-                key={filters.search}
-                initialValue={filters.search}
-                onSearchChange={(value: string) => updateParams({ search: value || null })}
-              />
-            </div>
+            <DebouncedSearchInput
+              key={filters.search}
+              placeholder="Name, E-Mail oder Mitgliedsnummer suchen..."
+              initialValue={filters.search}
+              onSearchChange={(value: string) => updateParams({ search: value || null })}
+              style={{ flex: 1, minWidth: 200 }}
+            />
 
             <Select
               value={filters.status}
@@ -347,36 +348,3 @@ export default function MembersListRoute() {
   );
 }
 
-type MemberSearchInputProps = {
-  initialValue: string;
-  onSearchChange: (value: string) => void;
-};
-
-function MemberSearchInput({ initialValue, onSearchChange }: MemberSearchInputProps) {
-  const [value, setValue] = useState(initialValue);
-  const timeoutRef = useRef<number | null>(null);
-
-  useEffect(() => () => {
-    if (timeoutRef.current !== null) {
-      window.clearTimeout(timeoutRef.current);
-    }
-  }, []);
-
-  return (
-    <TextInput
-      placeholder="Name, E-Mail oder Mitgliedsnummer suchen..."
-      leftSection={<Search className="h-4 w-4" />}
-      value={value}
-      onChange={(event) => {
-        const nextValue = event.target.value;
-        setValue(nextValue);
-        if (timeoutRef.current !== null) {
-          window.clearTimeout(timeoutRef.current);
-        }
-        timeoutRef.current = window.setTimeout(() => {
-          onSearchChange(nextValue);
-        }, 250);
-      }}
-    />
-  );
-}

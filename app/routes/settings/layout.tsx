@@ -58,9 +58,6 @@ export default function SettingsLayoutRoute() {
               );
             })}
           </Stack>
-          <Text size="xs" c="dimmed" mt="md">
-            Settings sind jetzt in eigenstaendige Unterseiten aufgeteilt.
-          </Text>
         </Card>
 
         <div className="min-w-0">

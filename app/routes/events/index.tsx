@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useMemo } from 'react';
+import { format, parse, startOfMonth, endOfMonth, eachDayOfInterval, addDays, addMonths, startOfWeek, getDay } from 'date-fns';
 import { Link, useLoaderData, useSearchParams } from 'react-router';
 import type { LoaderFunctionArgs } from 'react-router';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -26,14 +27,6 @@ const statusColor: Record<string, string> = {
 const weekDays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 const monthNames = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
 
-function parseDateStr(d: string) {
-  const [day, month, year] = d.split('.').map(Number);
-  return new Date(year, month - 1, day);
-}
-
-function formatDateStr(day: number, month: number, year: number) {
-  return `${String(day).padStart(2, '0')}.${String(month + 1).padStart(2, '0')}.${year}`;
-}
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
@@ -70,26 +63,22 @@ export default function EventsIndexRoute() {
   const goToday = () => { const t = new Date(); setCalendarState(t.getMonth(), t.getFullYear()); };
 
   const calendarGrid = useMemo(() => {
-    const firstDay = new Date(currentYear, currentMonth, 1);
-    const lastDay = new Date(currentYear, currentMonth + 1, 0);
-    const startDow = (firstDay.getDay() + 6) % 7;
+    const firstDay = startOfMonth(new Date(currentYear, currentMonth));
+    const lastDay = endOfMonth(firstDay);
+    const startDow = (getDay(firstDay) + 6) % 7;
     const days: { day: number; inMonth: boolean; dateStr: string }[] = [];
 
-    const prevLast = new Date(currentYear, currentMonth, 0).getDate();
     for (let i = startDow - 1; i >= 0; i--) {
-      const d = prevLast - i;
-      const m = currentMonth === 0 ? 11 : currentMonth - 1;
-      const y = currentMonth === 0 ? currentYear - 1 : currentYear;
-      days.push({ day: d, inMonth: false, dateStr: formatDateStr(d, m, y) });
+      const date = addDays(firstDay, -(i + 1));
+      days.push({ day: date.getDate(), inMonth: false, dateStr: format(date, 'dd.MM.yyyy') });
     }
-    for (let d = 1; d <= lastDay.getDate(); d++) {
-      days.push({ day: d, inMonth: true, dateStr: formatDateStr(d, currentMonth, currentYear) });
-    }
-    const remaining = 42 - days.length;
-    for (let d = 1; d <= remaining; d++) {
-      const m = currentMonth === 11 ? 0 : currentMonth + 1;
-      const y = currentMonth === 11 ? currentYear + 1 : currentYear;
-      days.push({ day: d, inMonth: false, dateStr: formatDateStr(d, m, y) });
+    eachDayOfInterval({ start: firstDay, end: lastDay }).forEach(date => {
+      days.push({ day: date.getDate(), inMonth: true, dateStr: format(date, 'dd.MM.yyyy') });
+    });
+    const nextMonthStart = addMonths(firstDay, 1);
+    for (let d = 0; d < 42 - days.length; d++) {
+      const date = addDays(nextMonthStart, d);
+      days.push({ day: date.getDate(), inMonth: false, dateStr: format(date, 'dd.MM.yyyy') });
     }
     return days;
   }, [currentMonth, currentYear]);
@@ -104,14 +93,16 @@ export default function EventsIndexRoute() {
   }, [calendarEvents]);
 
   const listGroups = useMemo(() => {
-    const sorted = [...calendarEvents].sort((a, b) => parseDateStr(a.date).getTime() - parseDateStr(b.date).getTime());
+    const sorted = [...calendarEvents].sort((a, b) =>
+      parse(a.date, 'dd.MM.yyyy', new Date()).getTime() - parse(b.date, 'dd.MM.yyyy', new Date()).getTime()
+    );
     const groups: { label: string; events: CalendarEvent[] }[] = [];
     let currentWeek = '';
     sorted.forEach(ev => {
-      const d = parseDateStr(ev.date);
-      const weekStart = new Date(d);
-      weekStart.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-      const label = `KW – ${weekStart.getDate()}.${weekStart.getMonth() + 1}. bis ${weekStart.getDate() + 6}.${weekStart.getMonth() + 1}.${weekStart.getFullYear()}`;
+      const d = parse(ev.date, 'dd.MM.yyyy', new Date());
+      const weekStart = startOfWeek(d, { weekStartsOn: 1 });
+      const weekEnd = addDays(weekStart, 6);
+      const label = `KW – ${format(weekStart, 'd.M.')} bis ${format(weekEnd, 'd.M.yyyy')}`;
       if (label !== currentWeek) {
         groups.push({ label, events: [] });
         currentWeek = label;
@@ -121,10 +112,8 @@ export default function EventsIndexRoute() {
     return groups;
   }, [calendarEvents]);
 
-  const isToday = (dateStr: string) => {
-    const t = new Date();
-    return dateStr === formatDateStr(t.getDate(), t.getMonth(), t.getFullYear());
-  };
+  const todayStr = format(new Date(), 'dd.MM.yyyy');
+  const isToday = (dateStr: string) => dateStr === todayStr;
 
   return (
     <div>
@@ -261,7 +250,7 @@ export default function EventsIndexRoute() {
               <Text size="sm" fw={600} c="dimmed" mb="xs">{group.label}</Text>
               <Stack gap="xs">
                 {group.events.map(ev => {
-                  const d = parseDateStr(ev.date);
+                  const d = parse(ev.date, 'dd.MM.yyyy', new Date());
                   const dayNames = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
                   return (
                     <Card key={ev.id} p="md" withBorder style={{ cursor: 'default' }}>

@@ -1,3 +1,4 @@
+import { format, addDays, addMonths } from 'date-fns';
 import { Link, useLoaderData, useSearchParams } from 'react-router';
 import type { LoaderFunctionArgs } from 'react-router';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -11,14 +12,10 @@ import { listAttendanceEventsUseCase } from '@/modules/attendance/use-cases/atte
 
 function getDateRange(range: string) {
   const start = new Date();
-  const end = new Date(start);
-
-  if (range === 'week') end.setDate(end.getDate() + 6);
-  if (range === 'month') end.setMonth(end.getMonth() + 1);
-
+  const end = range === 'week' ? addDays(start, 6) : addMonths(start, 1);
   return {
-    startDate: start.toISOString().slice(0, 10),
-    endDate: range === 'today' ? undefined : end.toISOString().slice(0, 10),
+    startDate: format(start, 'yyyy-MM-dd'),
+    endDate: range === 'today' ? undefined : format(end, 'yyyy-MM-dd'),
   };
 }
 
