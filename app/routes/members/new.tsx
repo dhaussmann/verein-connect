@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useState } from "react";
-import { Form, useActionData, useLoaderData, useNavigation, useNavigate } from "react-router";
+import { Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
 import { redirect } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { Button, Card, Select, Checkbox, Divider, TextInput, Group, Text } from "@mantine/core";
@@ -70,7 +70,6 @@ export async function action({ request, context }: ActionFunctionArgs) {
 }
 
 export default function MemberCreateRoute() {
-  const navigate = useNavigate();
   const navigation = useNavigation();
   const actionData = useActionData<typeof action>();
   const { roles, groups, profileFields } = useLoaderData<typeof loader>();
@@ -218,7 +217,7 @@ export default function MemberCreateRoute() {
             />
 
             <Group justify="flex-end" gap="xs" pt="xs">
-              <Button type="button" variant="subtle" onClick={() => navigate("/members")}>Abbrechen</Button>
+              <Button type="button" variant="subtle" component={Link} to="/members">Abbrechen</Button>
               <Button type="submit" disabled={!dsgvo || navigation.state === "submitting"}>
                 {navigation.state === "submitting" ? "Wird angelegt..." : "Mitglied anlegen"}
               </Button>

@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Form, useActionData, useLoaderData, useNavigation } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import {
@@ -52,6 +52,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
   const formData = await request.formData();
   const intent = String(formData.get('intent') || '');
+  const requestId = String(formData.get('requestId') || '');
 
   try {
     if (intent === 'save-role') {
@@ -74,7 +75,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         category: parsed.data.category,
         permissions,
       });
-      return { success: true, intent };
+      return { success: true, intent, requestId };
     }
 
     if (intent === 'delete-role') {
@@ -85,13 +86,13 @@ export async function action({ request, context }: ActionFunctionArgs) {
         actorUserId: user.id,
         roleId,
       });
-      return { success: true, intent };
+      return { success: true, intent, requestId };
     }
   } catch (error) {
-    return { success: false, intent, error: error instanceof Error ? error.message : 'Speichern fehlgeschlagen' };
+    return { success: false, intent, error: error instanceof Error ? error.message : 'Speichern fehlgeschlagen', requestId };
   }
 
-  return { success: false, error: 'Unbekannte Aktion' };
+  return { success: false, error: 'Unbekannte Aktion', requestId };
 }
 
 export default function SettingsRolesRoute() {
@@ -100,13 +101,10 @@ export default function SettingsRolesRoute() {
   const navigation = useNavigation();
   const [roleEditorOpen, setRoleEditorOpen] = useState(false);
   const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (actionData?.success && actionData.intent === 'save-role') {
-      setRoleEditorOpen(false);
-      setEditingRoleId(null);
-    }
-  }, [actionData]);
+  const [editorRequestId, setEditorRequestId] = useState(() => crypto.randomUUID());
+  const isRoleSaved = actionData?.success
+    && actionData.intent === 'save-role'
+    && actionData.requestId === editorRequestId;
 
   const editingRole = roles.find((role) => role.id === editingRoleId) || null;
 
@@ -119,6 +117,7 @@ export default function SettingsRolesRoute() {
         <Button
           onClick={() => {
             setEditingRoleId(null);
+            setEditorRequestId(crypto.randomUUID());
             setRoleEditorOpen(true);
           }}
           leftSection={<Plus size={16} />}
@@ -183,6 +182,7 @@ export default function SettingsRolesRoute() {
                   variant="subtle"
                   onClick={() => {
                     setEditingRoleId(role.id);
+                    setEditorRequestId(crypto.randomUUID());
                     setRoleEditorOpen(true);
                   }}
                 >
@@ -204,7 +204,7 @@ export default function SettingsRolesRoute() {
       </Stack>
 
       <Modal
-        opened={roleEditorOpen}
+        opened={roleEditorOpen && !isRoleSaved}
         onClose={() => setRoleEditorOpen(false)}
         title={editingRole ? `Rolle bearbeiten: ${editingRole.name}` : 'Neue Rolle'}
         size="xl"
@@ -213,6 +213,7 @@ export default function SettingsRolesRoute() {
         <Form method="post">
           <input type="hidden" name="intent" value="save-role" />
           <input type="hidden" name="roleId" value={editingRole?.id || ''} />
+          <input type="hidden" name="requestId" value={editorRequestId} />
           <Stack gap="md">
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               <TextInput label="Name" name="name" defaultValue={editingRole?.name || ''} />

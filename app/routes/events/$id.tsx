@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useLoaderData, useNavigate } from 'react-router';
+import { Link, useLoaderData } from 'react-router';
 import type { LoaderFunctionArgs } from 'react-router';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button, Card, Badge, Text, Group, Stack } from '@mantine/core';
@@ -31,7 +31,6 @@ export async function loader({ request, context, params }: LoaderFunctionArgs) {
 
 export default function EventDetailRoute() {
   const { event } = useLoaderData<typeof loader>();
-  const navigate = useNavigate();
 
   if (!event) {
     return (
@@ -44,7 +43,7 @@ export default function EventDetailRoute() {
   return (
     <div>
       <PageHeader title="Termin" />
-      <Button variant="subtle" mb="md" c="dimmed" onClick={() => navigate('/events')} leftSection={<ArrowLeft size={16} />}>
+      <Button variant="subtle" mb="md" c="dimmed" component={Link} to="/events" leftSection={<ArrowLeft size={16} />}>
         Zurück zu Termine
       </Button>
 

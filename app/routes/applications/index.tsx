@@ -8,6 +8,7 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import type { ContractApplication, PaginatedResponse } from '@/lib/api';
+import { buildSearchParams } from '@/lib/search-params';
 import { requireRouteData } from '@/core/runtime/route';
 import { acceptApplicationUseCase, listApplicationsUseCase, rejectApplicationUseCase } from '@/modules/applications/use-cases/applications.use-cases';
 
@@ -76,8 +77,6 @@ export default function ApplicationsIndexRoute() {
     if (!payload) return;
     if (payload.success) {
       notifications.show({ color: 'green', message: 'Aktion erfolgreich ausgeführt' });
-      setRejectOpen(false);
-      setRejectNotes('');
     } else if (payload.error) {
       notifications.show({ color: 'red', message: payload.error });
     }
@@ -92,12 +91,7 @@ export default function ApplicationsIndexRoute() {
         </div>
         <Select
           value={statusFilter || null}
-          onChange={(val) => {
-            const next = new URLSearchParams(searchParams);
-            if (!val || val === 'ALL') next.delete('status');
-            else next.set('status', val);
-            setSearchParams(next);
-          }}
+          onChange={(val) => setSearchParams(buildSearchParams(searchParams, { status: val ?? 'ALL' }, { pageParam: 'page', resetPageOnChange: false }))}
           placeholder="Status"
           w={160}
           data={[
@@ -205,7 +199,11 @@ export default function ApplicationsIndexRoute() {
             <Button variant="outline" onClick={() => setRejectOpen(false)}>Abbrechen</Button>
             <Button
               color="red"
-              onClick={() => fetcher.submit({ intent: 'reject', id: rejectId, reviewNotes: rejectNotes }, { method: 'post' })}
+              onClick={() => {
+                setRejectOpen(false);
+                setRejectNotes('');
+                fetcher.submit({ intent: 'reject', id: rejectId, reviewNotes: rejectNotes }, { method: 'post' });
+              }}
               disabled={fetcher.state !== 'idle'}
             >
               Ablehnen

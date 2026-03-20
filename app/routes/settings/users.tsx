@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useEffect, useState } from 'react';
-import { Form, useActionData, useFetcher, useLoaderData, useNavigation } from 'react-router';
+import { useState } from 'react';
+import { Form, useActionData, useFetcher, useLoaderData, useNavigation, useSearchParams } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import {
   Avatar,
@@ -29,17 +29,29 @@ import {
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
+  const url = new URL(request.url);
+  const search = (url.searchParams.get('search') || '').toLowerCase();
   const [users, roles] = await Promise.all([
     getSettingsUsersUseCase(env, user.orgId),
     getSettingsRolesUseCase(env, user.orgId),
   ]);
-  return { users, roles };
+  return {
+    users: users.filter(
+      (entry) =>
+        !search
+        || `${entry.firstName} ${entry.lastName}`.toLowerCase().includes(search)
+        || entry.email.toLowerCase().includes(search),
+    ),
+    roles,
+    filters: { search: url.searchParams.get('search') || '' },
+  };
 }
 
 export async function action({ request, context }: ActionFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
   const formData = await request.formData();
   const intent = String(formData.get('intent') || '');
+  const requestId = String(formData.get('requestId') || '');
 
   try {
     if (intent === 'create-user') {
@@ -68,7 +80,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         password: parsed.data.password,
         roleIds: parsed.data.role_ids,
       });
-      return { success: true, intent };
+      return { success: true, intent, requestId };
     }
 
     if (intent === 'toggle-admin') {
@@ -79,35 +91,26 @@ export async function action({ request, context }: ActionFunctionArgs) {
         actorUserId: user.id,
         targetUserId,
       });
-      return { success: true, intent, isAdmin: result.isAdmin };
+      return { success: true, intent, isAdmin: result.isAdmin, requestId };
     }
   } catch (error) {
-    return { success: false, intent, error: error instanceof Error ? error.message : 'Speichern fehlgeschlagen' };
+    return { success: false, intent, error: error instanceof Error ? error.message : 'Speichern fehlgeschlagen', requestId };
   }
 
-  return { success: false, error: 'Unbekannte Aktion' };
+  return { success: false, error: 'Unbekannte Aktion', requestId };
 }
 
 export default function SettingsUsersRoute() {
-  const { users, roles } = useLoaderData<typeof loader>();
+  const { users, roles, filters } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const toggleFetcher = useFetcher<typeof action>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [userDialogOpen, setUserDialogOpen] = useState(false);
-  const [userSearch, setUserSearch] = useState('');
-
-  useEffect(() => {
-    if (actionData?.success && actionData.intent === 'create-user') {
-      setUserDialogOpen(false);
-    }
-  }, [actionData]);
-
-  const filteredUsers = users.filter(
-    (user) =>
-      !userSearch ||
-      `${user.firstName} ${user.lastName}`.toLowerCase().includes(userSearch.toLowerCase()) ||
-      user.email.toLowerCase().includes(userSearch.toLowerCase()),
-  );
+  const [createUserRequestId, setCreateUserRequestId] = useState(() => crypto.randomUUID());
+  const isCreateUserSaved = actionData?.success
+    && actionData.intent === 'create-user'
+    && actionData.requestId === createUserRequestId;
 
   return (
     <>
@@ -115,7 +118,7 @@ export default function SettingsUsersRoute() {
         <Text fw={600} size="lg" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Users size={20} /> Benutzer verwalten
         </Text>
-        <Button onClick={() => setUserDialogOpen(true)} leftSection={<UserPlus size={16} />}>
+        <Button onClick={() => { setCreateUserRequestId(crypto.randomUUID()); setUserDialogOpen(true); }} leftSection={<UserPlus size={16} />}>
           Neuer Benutzer
         </Button>
       </Group>
@@ -135,8 +138,13 @@ export default function SettingsUsersRoute() {
         mb="md"
         placeholder="Benutzer suchen..."
         leftSection={<Search size={16} />}
-        value={userSearch}
-        onChange={(event) => setUserSearch(event.target.value)}
+        value={filters.search}
+        onChange={(event) => {
+          const next = new URLSearchParams(searchParams);
+          if (!event.target.value) next.delete('search');
+          else next.set('search', event.target.value);
+          setSearchParams(next);
+        }}
       />
 
       <Card>
@@ -151,7 +159,7 @@ export default function SettingsUsersRoute() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {filteredUsers.map((user) => {
+            {users.map((user) => {
               const isAdmin = user.roles.includes('org_admin');
               return (
                 <Table.Tr key={user.id}>
@@ -192,7 +200,7 @@ export default function SettingsUsersRoute() {
                 </Table.Tr>
               );
             })}
-            {filteredUsers.length === 0 && (
+            {users.length === 0 && (
               <Table.Tr>
                 <Table.Td colSpan={5}>
                   <Text ta="center" py="xl" c="dimmed">
@@ -208,9 +216,10 @@ export default function SettingsUsersRoute() {
         {users.length} Benutzer insgesamt
       </Text>
 
-      <Modal opened={userDialogOpen} onClose={() => setUserDialogOpen(false)} title="Neuen Benutzer anlegen" size="md">
+      <Modal opened={userDialogOpen && !isCreateUserSaved} onClose={() => setUserDialogOpen(false)} title="Neuen Benutzer anlegen" size="md">
         <Form method="post">
           <input type="hidden" name="intent" value="create-user" />
+          <input type="hidden" name="requestId" value={createUserRequestId} />
           <Stack gap="sm">
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
               <TextInput label="Vorname *" name="firstName" required />

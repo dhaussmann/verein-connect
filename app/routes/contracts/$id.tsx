@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useEffect, useState } from 'react';
-import { useFetcher, useLoaderData, useActionData, useNavigate } from 'react-router';
+import { Link, useFetcher, useLoaderData, useActionData, redirect } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import {
   ArrowLeft, FileText, User, Calendar, Receipt, Pause, Play, XCircle, Edit, Trash2,
@@ -97,7 +97,7 @@ export async function action({ request, context, params }: ActionFunctionArgs) {
     }
     if (intent === 'delete') {
       await deleteContractUseCase(env, { orgId: user.orgId, actorUserId: user.id, contractId: params.id });
-      return { success: true, intent };
+      return redirect('/contracts');
     }
   } catch (error) {
     return { success: false, intent, error: error instanceof Error ? error.message : 'Aktion fehlgeschlagen' };
@@ -109,7 +109,6 @@ export async function action({ request, context, params }: ActionFunctionArgs) {
 export default function ContractDetailRoute() {
   const { contract } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
-  const navigate = useNavigate();
   const fetcher = useFetcher<ContractDetailActionData>();
 
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -123,11 +122,6 @@ export default function ContractDetailRoute() {
     const payload = fetcher.data || actionData;
     if (!payload) return;
     if (payload.success) {
-      if (payload.intent === 'delete') {
-        notifications.show({ color: 'green', message: 'Vertrag gelöscht' });
-        navigate('/contracts');
-        return;
-      }
       notifications.show({ color: 'green', message: payload.intent === 'create-invoice' ? 'Rechnung erstellt' : payload.intent === 'pause' ? 'Pause eingetragen' : 'Vertrag gekündigt' });
       setCancelOpen(false);
       setPauseOpen(false);
@@ -137,7 +131,7 @@ export default function ContractDetailRoute() {
     } else if (payload.error) {
       notifications.show({ color: 'red', message: payload.error });
     }
-  }, [fetcher.data, actionData, navigate]);
+  }, [fetcher.data, actionData]);
 
   const c = contract as TypedContractDetail | null;
 
@@ -149,7 +143,7 @@ export default function ContractDetailRoute() {
     <Stack gap="lg">
       {/* Header */}
       <Group gap="md">
-        <ActionIcon variant="subtle" onClick={() => navigate('/contracts')}>
+        <ActionIcon variant="subtle" component={Link} to="/contracts">
           <ArrowLeft size={20} />
         </ActionIcon>
         <div style={{ flex: 1 }}>
@@ -248,7 +242,7 @@ export default function ContractDetailRoute() {
                     <Row label="Mobil" value={c.member.mobile || '-'} />
                     <Row label="Straße" value={c.member.street || '-'} />
                     <Row label="PLZ / Ort" value={[c.member.zip, c.member.city].filter(Boolean).join(' ') || '-'} />
-                    <Button variant="outline" size="sm" mt="xs" leftSection={<User size={16} />} onClick={() => navigate(`/members/${c.member!.id}`)}>
+                    <Button variant="outline" size="sm" mt="xs" leftSection={<User size={16} />} component={Link} to={`/members/${c.member!.id}`}>
                       Profil öffnen
                     </Button>
                   </Stack>
@@ -264,10 +258,10 @@ export default function ContractDetailRoute() {
                 <Text fw={600} mb="md">Verknüpfte Verträge</Text>
                 <Stack gap="xs">
                   {c.children.map((child) => (
-                    <div
+                    <Link
                       key={child.id}
-                      className="flex items-center justify-between p-2 rounded border hover:bg-muted/30 cursor-pointer"
-                      onClick={() => navigate(`/contracts/${child.id}`)}
+                      to={`/contracts/${child.id}`}
+                      className="flex items-center justify-between p-2 rounded border hover:bg-muted/30"
                     >
                       <div>
                         <Text fw={500} size="sm">{child.contractNumber}</Text>
@@ -276,7 +270,7 @@ export default function ContractDetailRoute() {
                       <Badge color={statusMap[child.status]?.color || 'gray'}>
                         {statusMap[child.status]?.label || child.status}
                       </Badge>
-                    </div>
+                    </Link>
                   ))}
                 </Stack>
               </Card>

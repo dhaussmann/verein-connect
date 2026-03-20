@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useEffect, useState } from 'react';
-import { useNavigate, useLoaderData, useActionData, useNavigation } from 'react-router';
+import { Link, redirect, useLoaderData, useActionData, useNavigation } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import { ArrowLeft } from 'lucide-react';
 import {
@@ -76,7 +76,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
       actorUserId: user.id,
       payload: JSON.parse(String(formData.get('payload') || '{}')),
     });
-    return { success: true };
+    return redirect('/contracts');
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Erstellen fehlgeschlagen' };
   }
@@ -86,7 +86,6 @@ export default function ContractNewRoute() {
   const { membersData, mtData, tarifData, groupsData } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigationState = useNavigation().state;
-  const navigate = useNavigate();
 
   const members = (membersData as ContractNewListData<Member>)?.data || [];
   const membershipTypes = (mtData as ContractNewListData<MembershipType>)?.data || [];
@@ -161,18 +160,15 @@ export default function ContractNewRoute() {
   };
 
   useEffect(() => {
-    if (actionData?.success) {
-      notifications.show({ color: 'green', message: 'Vertrag erstellt' });
-      navigate('/contracts');
-    } else if (actionData?.error) {
+    if (actionData?.error) {
       notifications.show({ color: 'red', message: actionData.error });
     }
-  }, [actionData, navigate]);
+  }, [actionData]);
 
   return (
     <Stack gap="lg">
       <Group gap="md">
-        <ActionIcon variant="subtle" onClick={() => navigate('/contracts')}>
+        <ActionIcon variant="subtle" component={Link} to="/contracts">
           <ArrowLeft size={20} />
         </ActionIcon>
         <div>
@@ -336,7 +332,7 @@ export default function ContractNewRoute() {
           </div>
 
           <Group justify="flex-end" gap="sm">
-            <Button variant="outline" type="button" onClick={() => navigate('/contracts')}>Abbrechen</Button>
+            <Button variant="outline" type="button" component={Link} to="/contracts">Abbrechen</Button>
             <Button type="submit" disabled={navigationState === 'submitting'}>
               {navigationState === 'submitting' ? 'Wird erstellt...' : 'Vertrag erstellen'}
             </Button>

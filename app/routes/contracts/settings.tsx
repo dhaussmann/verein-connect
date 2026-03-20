@@ -49,6 +49,20 @@ type CollectionData<T> = {
   data?: T[];
 };
 
+function createSettingsForm(settings: ContractSettings | null) {
+  return {
+    invoice_publish_mode: settings?.invoicePublishMode || 'DRAFT',
+    days_in_advance: settings?.daysInAdvance || 14,
+    price_update_trigger: settings?.priceUpdateTrigger || 'ON_RENEWAL',
+    sepa_required: !!settings?.sepaRequired,
+    member_cancellation_allowed: !!settings?.memberCancellationAllowed,
+    self_registration_enabled: !!settings?.selfRegistrationEnabled,
+    self_registration_access: settings?.selfRegistrationAccess || 'LINK_AND_FORM',
+    welcome_page_text: settings?.welcomePageText || '',
+    confirmation_page_text: settings?.confirmationPageText || '',
+  };
+}
+
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
   const [settings, mtData, tarifData, dgData, groupsResult] = await Promise.all([
@@ -133,40 +147,14 @@ export default function ContractSettingsRoute() {
   const actionData = useActionData<typeof action>();
   const fetcher = useFetcher<ContractSettingsActionData>();
   const revalidator = useRevalidator();
+  const contractSettings = settings as ContractSettings | null;
 
   const membershipTypes = (mtData as CollectionData<MembershipType>)?.data || [];
   const tarifs = (tarifData as CollectionData<Tarif>)?.data || [];
   const discountGroups = (dgData as CollectionData<DiscountGroup>)?.data || [];
   const groups = (groupData as CollectionData<ContractGroup>)?.data || [];
 
-  const [form, setForm] = useState({
-    invoice_publish_mode: 'DRAFT',
-    days_in_advance: 14,
-    price_update_trigger: 'ON_RENEWAL',
-    sepa_required: false,
-    member_cancellation_allowed: true,
-    self_registration_enabled: false,
-    self_registration_access: 'LINK_AND_FORM',
-    welcome_page_text: '',
-    confirmation_page_text: '',
-  });
-
-  useEffect(() => {
-    const s = settings as ContractSettings | null;
-    if (s) {
-      setForm({
-        invoice_publish_mode: s.invoicePublishMode || 'DRAFT',
-        days_in_advance: s.daysInAdvance || 14,
-        price_update_trigger: s.priceUpdateTrigger || 'ON_RENEWAL',
-        sepa_required: !!s.sepaRequired,
-        member_cancellation_allowed: !!s.memberCancellationAllowed,
-        self_registration_enabled: !!s.selfRegistrationEnabled,
-        self_registration_access: s.selfRegistrationAccess || 'LINK_AND_FORM',
-        welcome_page_text: s.welcomePageText || '',
-        confirmation_page_text: s.confirmationPageText || '',
-      });
-    }
-  }, [settings]);
+  const [form, setForm] = useState(() => createSettingsForm(contractSettings));
 
   const handleSaveSettings = async () => {
     try {

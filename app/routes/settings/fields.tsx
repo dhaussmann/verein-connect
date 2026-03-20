@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Form, useActionData, useLoaderData, useNavigation } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import {
@@ -42,6 +42,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
   const formData = await request.formData();
   const intent = String(formData.get('intent') || '');
+  const requestId = String(formData.get('requestId') || '');
 
   try {
     if (intent === 'save-field') {
@@ -68,7 +69,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         gdprRetentionDays: parsed.data.gdprRetentionDays,
       });
 
-      return { success: true, intent };
+      return { success: true, intent, requestId };
     }
 
     if (intent === 'delete-field') {
@@ -79,13 +80,13 @@ export async function action({ request, context }: ActionFunctionArgs) {
         actorUserId: user.id,
         fieldId,
       });
-      return { success: true, intent };
+      return { success: true, intent, requestId };
     }
   } catch (error) {
-    return { success: false, intent, error: error instanceof Error ? error.message : 'Speichern fehlgeschlagen' };
+    return { success: false, intent, error: error instanceof Error ? error.message : 'Speichern fehlgeschlagen', requestId };
   }
 
-  return { success: false, error: 'Unbekannte Aktion' };
+  return { success: false, error: 'Unbekannte Aktion', requestId };
 }
 
 export default function SettingsFieldsRoute() {
@@ -94,13 +95,10 @@ export default function SettingsFieldsRoute() {
   const navigation = useNavigation();
   const [fieldEditorOpen, setFieldEditorOpen] = useState(false);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (actionData?.success && actionData.intent === 'save-field') {
-      setFieldEditorOpen(false);
-      setEditingFieldId(null);
-    }
-  }, [actionData]);
+  const [editorRequestId, setEditorRequestId] = useState(() => crypto.randomUUID());
+  const isFieldSaved = actionData?.success
+    && actionData.intent === 'save-field'
+    && actionData.requestId === editorRequestId;
 
   const editingField = fields.find((field) => field.id === editingFieldId) || null;
 
@@ -113,6 +111,7 @@ export default function SettingsFieldsRoute() {
         <Button
           onClick={() => {
             setEditingFieldId(null);
+            setEditorRequestId(crypto.randomUUID());
             setFieldEditorOpen(true);
           }}
           leftSection={<Plus size={16} />}
@@ -175,6 +174,7 @@ export default function SettingsFieldsRoute() {
                       size="sm"
                       onClick={() => {
                         setEditingFieldId(field.id);
+                        setEditorRequestId(crypto.randomUUID());
                         setFieldEditorOpen(true);
                       }}
                     >
@@ -204,10 +204,11 @@ export default function SettingsFieldsRoute() {
         </Table>
       </Card>
 
-      <Modal opened={fieldEditorOpen} onClose={() => setFieldEditorOpen(false)} title={editingField ? 'Profilfeld bearbeiten' : 'Neues Profilfeld'}>
+      <Modal opened={fieldEditorOpen && !isFieldSaved} onClose={() => setFieldEditorOpen(false)} title={editingField ? 'Profilfeld bearbeiten' : 'Neues Profilfeld'}>
         <Form method="post">
           <input type="hidden" name="intent" value="save-field" />
           <input type="hidden" name="fieldId" value={editingField?.id || ''} />
+          <input type="hidden" name="requestId" value={editorRequestId} />
           <Stack gap="md">
             <TextInput label="Interner Name" name="name" placeholder="z.B. shoeSize" defaultValue={editingField?.name || ''} />
             <TextInput label="Anzeigename" name="label" placeholder="z.B. Schuhgröße" defaultValue={editingField?.label || ''} />

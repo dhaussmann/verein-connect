@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useEffect, useState } from "react";
-import { Form, useActionData, useLoaderData, useNavigation, useNavigate } from "react-router";
+import { useState } from "react";
+import { Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import {
   Button, ActionIcon, Card, Text, Group as MantineGroup, Stack, Badge,
@@ -31,6 +31,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "");
+  const requestId = String(formData.get("requestId") || "");
 
   try {
     if (intent === "create-group" || intent === "update-group") {
@@ -48,48 +49,45 @@ export async function action({ request, context }: ActionFunctionArgs) {
         if (!groupId) return { success: false, intent, error: "Gruppe fehlt" };
         await updateGroupUseCase(env, { orgId: user.orgId, actorUserId: user.id, groupId, ...parsed.data });
       }
-      return { success: true, intent };
+      return { success: true, intent, requestId };
     }
 
     if (intent === "delete-group") {
       const groupId = String(formData.get("groupId") || "");
       if (!groupId) return { success: false, intent, error: "Gruppe fehlt" };
       await deleteGroupUseCase(env, { orgId: user.orgId, actorUserId: user.id, groupId });
-      return { success: true, intent };
+      return { success: true, intent, requestId };
     }
   } catch (error) {
-    return { success: false, intent, error: error instanceof Error ? error.message : "Fehler" };
+    return { success: false, intent, error: error instanceof Error ? error.message : "Fehler", requestId };
   }
 
-  return { success: false, error: "Unbekannte Aktion" };
+  return { success: false, error: "Unbekannte Aktion", requestId };
 }
 
 export default function GroupsListRoute() {
-  const navigate = useNavigate();
   const { groups } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<GroupListItem | null>(null);
   const [form, setForm] = useState({ name: "", description: "", category: "standard" });
-
-  useEffect(() => {
-    if (actionData?.success && (actionData.intent === "create-group" || actionData.intent === "update-group")) {
-      setDialogOpen(false);
-      setEditingGroup(null);
-      setForm({ name: "", description: "", category: "standard" });
-    }
-  }, [actionData]);
+  const [editorRequestId, setEditorRequestId] = useState(() => crypto.randomUUID());
+  const isEditorSaved = actionData?.success
+    && (actionData.intent === "create-group" || actionData.intent === "update-group")
+    && actionData.requestId === editorRequestId;
 
   const openCreate = () => {
     setEditingGroup(null);
     setForm({ name: "", description: "", category: "standard" });
+    setEditorRequestId(crypto.randomUUID());
     setDialogOpen(true);
   };
 
   const openEdit = (group: GroupListItem) => {
     setEditingGroup(group);
     setForm({ name: group.name, description: group.description || "", category: group.category || "standard" });
+    setEditorRequestId(crypto.randomUUID());
     setDialogOpen(true);
   };
 
@@ -136,12 +134,10 @@ export default function GroupsListRoute() {
             </Table.Thead>
             <Table.Tbody>
               {groups.map((group) => (
-                <Table.Tr
-                  key={group.id}
-                  style={{ cursor: "pointer" }}
-                  onClick={() => navigate(`/groups/${group.id}`)}
-                >
-                  <Table.Td fw={500}>{group.name}</Table.Td>
+                <Table.Tr key={group.id}>
+                  <Table.Td fw={500}>
+                    <Link to={`/groups/${group.id}`}>{group.name}</Link>
+                  </Table.Td>
                   <Table.Td>
                     <Badge color={group.category === "team" ? "blue" : "gray"}>
                       {categoryLabel[group.category || "standard"] || group.category}
@@ -176,10 +172,11 @@ export default function GroupsListRoute() {
         )}
       </Card>
 
-      <Modal opened={dialogOpen} onClose={() => setDialogOpen(false)} title={editingGroup ? "Gruppe bearbeiten" : "Neue Gruppe"} size="md">
+      <Modal opened={dialogOpen && !isEditorSaved} onClose={() => setDialogOpen(false)} title={editingGroup ? "Gruppe bearbeiten" : "Neue Gruppe"} size="md">
         <Form method="post">
           <input type="hidden" name="intent" value={editingGroup ? "update-group" : "create-group"} />
           <input type="hidden" name="groupId" value={editingGroup?.id || ""} />
+          <input type="hidden" name="requestId" value={editorRequestId} />
           <Stack gap="md">
             <TextInput
               label="Name *"

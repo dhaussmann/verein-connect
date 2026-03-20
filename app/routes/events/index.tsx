@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable react-refresh/only-export-components */
-import { useState, useMemo } from 'react';
-import { useLoaderData, useNavigate } from 'react-router';
+import { useMemo } from 'react';
+import { Link, useLoaderData, useSearchParams } from 'react-router';
 import type { LoaderFunctionArgs } from 'react-router';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button, Card, Badge, Text, Group, Stack, Popover } from '@mantine/core';
@@ -44,23 +44,31 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
 
 export default function EventsIndexRoute() {
   const { apiCalendarEvents } = useLoaderData<typeof loader>();
-  const navigate = useNavigate();
-  const [view, setView] = useState<'calendar' | 'list'>('calendar');
+  const [searchParams, setSearchParams] = useSearchParams();
   const now = new Date();
-  const [currentMonth, setCurrentMonth] = useState(now.getMonth());
-  const [currentYear, setCurrentYear] = useState(now.getFullYear());
+  const view = searchParams.get('view') === 'list' ? 'list' : 'calendar';
+  const currentMonth = Number(searchParams.get('month') || now.getMonth());
+  const currentYear = Number(searchParams.get('year') || now.getFullYear());
 
   const calendarEvents: Event[] = (apiCalendarEvents as Event[] | undefined) ?? [];
 
+  const setCalendarState = (month: number, year: number, nextView = view) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('month', String(month));
+    next.set('year', String(year));
+    next.set('view', nextView);
+    setSearchParams(next);
+  };
+
   const prevMonth = () => {
-    if (currentMonth === 0) { setCurrentMonth(11); setCurrentYear(y => y - 1); }
-    else setCurrentMonth(m => m - 1);
+    if (currentMonth === 0) setCalendarState(11, currentYear - 1);
+    else setCalendarState(currentMonth - 1, currentYear);
   };
   const nextMonth = () => {
-    if (currentMonth === 11) { setCurrentMonth(0); setCurrentYear(y => y + 1); }
-    else setCurrentMonth(m => m + 1);
+    if (currentMonth === 11) setCalendarState(0, currentYear + 1);
+    else setCalendarState(currentMonth + 1, currentYear);
   };
-  const goToday = () => { const t = new Date(); setCurrentMonth(t.getMonth()); setCurrentYear(t.getFullYear()); };
+  const goToday = () => { const t = new Date(); setCalendarState(t.getMonth(), t.getFullYear()); };
 
   const calendarGrid = useMemo(() => {
     const firstDay = new Date(currentYear, currentMonth, 1);
@@ -124,7 +132,7 @@ export default function EventsIndexRoute() {
       <PageHeader
         title="Termine"
         action={
-          <Button onClick={() => navigate('/events/new')} leftSection={<Plus size={16} />}>
+          <Button component={Link} to="/events/new" leftSection={<Plus size={16} />}>
             Neuer Termin
           </Button>
         }
@@ -145,7 +153,7 @@ export default function EventsIndexRoute() {
           <Button
             variant={view === 'calendar' ? 'filled' : 'subtle'}
             size="sm"
-            onClick={() => setView('calendar')}
+            onClick={() => setCalendarState(currentMonth, currentYear, 'calendar')}
             style={{ borderRadius: 0 }}
             px="sm"
           >
@@ -154,7 +162,7 @@ export default function EventsIndexRoute() {
           <Button
             variant={view === 'list' ? 'filled' : 'subtle'}
             size="sm"
-            onClick={() => setView('list')}
+            onClick={() => setCalendarState(currentMonth, currentYear, 'list')}
             style={{ borderRadius: 0 }}
             px="sm"
           >

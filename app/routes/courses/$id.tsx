@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useState } from 'react';
-import { useLoaderData, useNavigate } from 'react-router';
+import { Link, useLoaderData } from 'react-router';
 import type { LoaderFunctionArgs } from 'react-router';
 import { Button, Badge, Card, Avatar, Tabs, Menu, ActionIcon, Group, Stack, Text } from '@mantine/core';
 import { ArrowLeft, Clock, MapPin, Users, Euro, Edit, MoreHorizontal, UserPlus } from 'lucide-react';
@@ -32,7 +32,6 @@ export async function loader({ request, context, params }: LoaderFunctionArgs) {
 
 export default function CourseDetailRoute() {
   const { course } = useLoaderData<typeof loader>();
-  const navigate = useNavigate();
   const [tab, setTab] = useState('info');
 
   if (!course) {
@@ -45,7 +44,7 @@ export default function CourseDetailRoute() {
 
   return (
     <div>
-      <Button variant="subtle" mb="md" leftSection={<ArrowLeft size={16} />} onClick={() => navigate('/courses')}>
+      <Button variant="subtle" mb="md" leftSection={<ArrowLeft size={16} />} component={Link} to="/courses">
         Zurück zu Kurse
       </Button>
 

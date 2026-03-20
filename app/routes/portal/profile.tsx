@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useEffect, useState } from 'react';
-import { useLoaderData, useActionData, useNavigation } from 'react-router';
+import { Form, useLoaderData, useActionData, useNavigation } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -153,7 +153,7 @@ export default function PortalProfileRoute() {
       </Card>
 
       {editing ? (
-        <form method="post">
+        <Form method="post">
           <Card withBorder mb="md">
             <Card.Section p="md">
               <Text fw={600} mb="md">Kontaktdaten bearbeiten</Text>
@@ -177,7 +177,7 @@ export default function PortalProfileRoute() {
               </Stack>
             </Card.Section>
           </Card>
-        </form>
+        </Form>
       ) : (
         <>
           {/* Personal Data */}
@@ -255,7 +255,7 @@ export default function PortalProfileRoute() {
 
       {/* Password Change Modal */}
       <Modal opened={passwordOpen} onClose={() => setPasswordOpen(false)} title="Passwort ändern" size="sm">
-        <form method="post">
+        <Form method="post">
           <Stack gap="md">
             <input type="hidden" name="intent" value="change-password" />
             <TextInput label="Aktuelles Passwort" name="current_password" type="password" required />
@@ -268,7 +268,7 @@ export default function PortalProfileRoute() {
               {navigationState === 'submitting' ? 'Ändern...' : 'Passwort ändern'}
             </Button>
           </Group>
-        </form>
+        </Form>
       </Modal>
     </div>
   );

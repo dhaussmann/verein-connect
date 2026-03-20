@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useState } from "react";
-import { Form, useActionData, useLoaderData, useLocation, useNavigation } from "react-router";
+import { Form, useActionData, useLoaderData, useSearchParams } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import {
   ActionIcon,
@@ -18,15 +18,24 @@ import {
 } from "@mantine/core";
 import { AlertTriangle, CheckCircle, FileDown, Mail, MoreHorizontal, Plus, Receipt, Search, Trash2, TrendingUp } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { RoutePendingOverlay } from "@/components/ui/route-pending-overlay";
+import { useRoutePending } from "@/hooks/use-route-pending";
+import { buildSearchParams } from "@/lib/search-params";
 import { requireRouteData } from "@/core/runtime/route";
 import { deleteInvoiceUseCase, getInvoicesDataUseCase, markInvoicePaidUseCase } from "@/modules/finance/use-cases/finance.use-cases";
 import type { Invoice } from "@/lib/api";
 import { FinanceTabs } from "@/components/finance/FinanceTabs";
-import { Skeleton } from "@/components/ui/skeleton";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
-  return getInvoicesDataUseCase(env, user.orgId);
+  const url = new URL(request.url);
+  const search = url.searchParams.get("search") || undefined;
+  const status = url.searchParams.get("status") || "all";
+  const response = await getInvoicesDataUseCase(env, user.orgId, { search, status });
+  return {
+    ...response,
+    filters: { search: search || "", status },
+  };
 }
 
 export async function action({ request, context }: ActionFunctionArgs) {
@@ -64,20 +73,16 @@ const statusColor = (status: string): string => {
 };
 
 export default function FinanceInvoicesRoute() {
-  const location = useLocation();
-  const navigation = useNavigation();
-  const { data: invoices, summary } = useLoaderData<typeof loader>();
+  const { data: invoices, summary, filters } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
-  const [invoiceFilter, setInvoiceFilter] = useState("all");
-  const [invoiceSearch, setInvoiceSearch] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
-  const isLoading = navigation.state === "loading" && navigation.location?.pathname === location.pathname;
+  const { isSearchPending } = useRoutePending();
 
   const fmt = (n: number) => n.toLocaleString("de-DE", { minimumFractionDigits: 2 }) + " €";
-  const filteredInvoices = invoices.filter((invoice) =>
-    (invoiceFilter === "all" || invoice.status === invoiceFilter)
-    && (invoice.number.toLowerCase().includes(invoiceSearch.toLowerCase()) || invoice.memberName.toLowerCase().includes(invoiceSearch.toLowerCase())),
-  );
+  const updateFilter = (key: string, value: string) => {
+    setSearchParams(buildSearchParams(searchParams, { [key]: value }));
+  };
 
   return (
     <div>
@@ -86,39 +91,28 @@ export default function FinanceInvoicesRoute() {
 
       {actionData?.error && <Text c="red" size="sm" mb="sm">{actionData.error}</Text>}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {isLoading ? (
-          <>
-            <FinanceKpiSkeleton />
-            <FinanceKpiSkeleton />
-            <FinanceKpiSkeleton />
-            <FinanceKpiSkeleton />
-          </>
-        ) : (
-          <>
-            <Card withBorder><Group gap="sm"><div style={{ padding: 8, borderRadius: 8, background: "var(--mantine-color-yellow-0)" }}><Receipt size={20} color="var(--mantine-color-yellow-6)" /></div><div><Text size="sm" c="dimmed">Offene Rechnungen</Text><Text size="xl" fw={700} c="yellow">{fmt(summary.total_open)}</Text></div></Group></Card>
-            <Card withBorder><Group gap="sm"><div style={{ padding: 8, borderRadius: 8, background: "var(--mantine-color-green-0)" }}><CheckCircle size={20} color="var(--mantine-color-green-6)" /></div><div><Text size="sm" c="dimmed">Bezahlt</Text><Text size="xl" fw={700} c="green">{fmt(summary.total_paid)}</Text></div></Group></Card>
-            <Card withBorder><Group gap="sm"><div style={{ padding: 8, borderRadius: 8, background: "var(--mantine-color-red-0)" }}><AlertTriangle size={20} color="var(--mantine-color-red-6)" /></div><div><Text size="sm" c="dimmed">Überfällig</Text><Text size="xl" fw={700} c="red">{fmt(summary.total_overdue)}</Text></div></Group></Card>
-            <Card withBorder><Group gap="sm"><div style={{ padding: 8, borderRadius: 8, background: "var(--mantine-color-blue-0)" }}><TrendingUp size={20} color="var(--mantine-color-blue-6)" /></div><div><Text size="sm" c="dimmed">Gesamt</Text><Text size="xl" fw={700}>{fmt(summary.total_open + summary.total_paid + summary.total_overdue)}</Text></div></Group></Card>
-          </>
-        )}
+      <div className="relative mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <RoutePendingOverlay visible={isSearchPending} />
+        <Card withBorder><Group gap="sm"><div style={{ padding: 8, borderRadius: 8, background: "var(--mantine-color-yellow-0)" }}><Receipt size={20} color="var(--mantine-color-yellow-6)" /></div><div><Text size="sm" c="dimmed">Offene Rechnungen</Text><Text size="xl" fw={700} c="yellow">{fmt(summary.total_open)}</Text></div></Group></Card>
+        <Card withBorder><Group gap="sm"><div style={{ padding: 8, borderRadius: 8, background: "var(--mantine-color-green-0)" }}><CheckCircle size={20} color="var(--mantine-color-green-6)" /></div><div><Text size="sm" c="dimmed">Bezahlt</Text><Text size="xl" fw={700} c="green">{fmt(summary.total_paid)}</Text></div></Group></Card>
+        <Card withBorder><Group gap="sm"><div style={{ padding: 8, borderRadius: 8, background: "var(--mantine-color-red-0)" }}><AlertTriangle size={20} color="var(--mantine-color-red-6)" /></div><div><Text size="sm" c="dimmed">Überfällig</Text><Text size="xl" fw={700} c="red">{fmt(summary.total_overdue)}</Text></div></Group></Card>
+        <Card withBorder><Group gap="sm"><div style={{ padding: 8, borderRadius: 8, background: "var(--mantine-color-blue-0)" }}><TrendingUp size={20} color="var(--mantine-color-blue-6)" /></div><div><Text size="sm" c="dimmed">Gesamt</Text><Text size="xl" fw={700}>{fmt(summary.total_open + summary.total_paid + summary.total_overdue)}</Text></div></Group></Card>
       </div>
 
       <Group gap="sm" mb="md" wrap="wrap">
-        <TextInput placeholder="Rechnungsnr. oder Name..." value={invoiceSearch} onChange={(e) => setInvoiceSearch(e.target.value)} leftSection={<Search size={16} />} style={{ flex: 1, minWidth: 200, maxWidth: 384 }} />
-        <Select value={invoiceFilter} onChange={(val) => setInvoiceFilter(val ?? "all")} w={160} placeholder="Status" data={[{ value: "all", label: "Alle" }, { value: "Entwurf", label: "Entwurf" }, { value: "Gesendet", label: "Gesendet" }, { value: "Bezahlt", label: "Bezahlt" }, { value: "Überfällig", label: "Überfällig" }, { value: "Storniert", label: "Storniert" }]} />
+        <TextInput placeholder="Rechnungsnr. oder Name..." value={filters.search} onChange={(e) => updateFilter("search", e.target.value)} leftSection={<Search size={16} />} style={{ flex: 1, minWidth: 200, maxWidth: 384 }} />
+        <Select value={filters.status} onChange={(val) => updateFilter("status", val ?? "all")} w={160} placeholder="Status" data={[{ value: "all", label: "Alle" }, { value: "Entwurf", label: "Entwurf" }, { value: "Gesendet", label: "Gesendet" }, { value: "Bezahlt", label: "Bezahlt" }, { value: "Überfällig", label: "Überfällig" }, { value: "Storniert", label: "Storniert" }]} />
       </Group>
 
-      <Card withBorder>
-        {isLoading ? (
-          <FinanceTableSkeleton />
-        ) : filteredInvoices.length === 0 ? (
+      <Card withBorder className="relative">
+        <RoutePendingOverlay visible={isSearchPending} />
+        {invoices.length === 0 ? (
           <Text ta="center" py="xl" c="dimmed" size="sm">Keine Rechnungen vorhanden.</Text>
         ) : (
           <Table>
             <Table.Thead><Table.Tr><Table.Th>Rechnungsnr.</Table.Th><Table.Th>Mitglied</Table.Th><Table.Th>Datum</Table.Th><Table.Th>Fällig</Table.Th><Table.Th style={{ textAlign: "right" }}>Betrag</Table.Th><Table.Th>Status</Table.Th><Table.Th style={{ width: 48 }} /></Table.Tr></Table.Thead>
             <Table.Tbody>
-              {filteredInvoices.map((invoice, i) => (
+              {invoices.map((invoice, i) => (
                 <Table.Tr key={invoice.id} style={i % 2 === 1 ? { background: "var(--mantine-color-gray-0)" } : undefined}>
                   <Table.Td><button style={{ color: "var(--mantine-color-blue-6)", fontWeight: 500, background: "none", border: "none", cursor: "pointer", padding: 0 }} onClick={() => setDetailInvoice(invoice)}>{invoice.number}</button></Table.Td>
                   <Table.Td><Group gap="xs"><Avatar size="sm" radius="xl">{invoice.memberInitials}</Avatar><Text size="sm">{invoice.memberName}</Text></Group></Table.Td>
@@ -138,40 +132,5 @@ export default function FinanceInvoicesRoute() {
         {detailInvoice && <Text size="sm" c="dimmed">Detailansicht bleibt fachlich unverändert und kann als eigener View-Component weiter zerlegt werden.</Text>}
       </Modal>
     </div>
-  );
-}
-
-function FinanceKpiSkeleton() {
-  return (
-    <Card withBorder>
-      <Group gap="sm">
-        <Skeleton h={36} w={36} radius="md" />
-        <div style={{ flex: 1 }}>
-          <Skeleton h={14} w="55%" mb={8} />
-          <Skeleton h={28} w="45%" />
-        </div>
-      </Group>
-    </Card>
-  );
-}
-
-function FinanceTableSkeleton() {
-  return (
-    <Table>
-      <Table.Thead><Table.Tr><Table.Th>Rechnungsnr.</Table.Th><Table.Th>Mitglied</Table.Th><Table.Th>Datum</Table.Th><Table.Th>Fällig</Table.Th><Table.Th style={{ textAlign: "right" }}>Betrag</Table.Th><Table.Th>Status</Table.Th><Table.Th style={{ width: 48 }} /></Table.Tr></Table.Thead>
-      <Table.Tbody>
-        {Array.from({ length: 6 }).map((_, index) => (
-          <Table.Tr key={index}>
-            <Table.Td><Skeleton h={12} w={90} /></Table.Td>
-            <Table.Td><Group gap="xs"><Skeleton h={28} w={28} radius="xl" /><Skeleton h={12} w={120} /></Group></Table.Td>
-            <Table.Td><Skeleton h={12} w={76} /></Table.Td>
-            <Table.Td><Skeleton h={12} w={76} /></Table.Td>
-            <Table.Td style={{ textAlign: "right" }}><Skeleton h={12} w={68} ml="auto" /></Table.Td>
-            <Table.Td><Skeleton h={20} w={82} radius="xl" /></Table.Td>
-            <Table.Td><Skeleton h={24} w={24} radius="xl" /></Table.Td>
-          </Table.Tr>
-        ))}
-      </Table.Tbody>
-    </Table>
   );
 }

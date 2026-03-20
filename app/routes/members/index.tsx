@@ -1,8 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useEffect, useState } from "react";
-import { Form, Link, useFetcher, useLoaderData, useNavigate, useSearchParams } from "react-router";
+import { useEffect, useRef, useState, type ComponentPropsWithoutRef } from "react";
+import { Form, Link, useFetcher, useLoaderData, useSearchParams } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { useDebouncedValue } from "@mantine/hooks";
 import { Button, Card, Badge, TextInput, Select, Checkbox, Table, Modal, Group, Text, Menu } from "@mantine/core";
 import {
   Plus, Search, Filter, MoreHorizontal, Download, ChevronUp, ChevronDown,
@@ -10,6 +9,7 @@ import {
   Users, Send, Receipt, FileSpreadsheet,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { buildSearchParams } from "@/lib/search-params";
 import { requireRouteData } from "@/core/runtime/route";
 import { listMembersUseCase } from "@/modules/members/use-cases/list-members.use-case";
 import { changeMemberStatusUseCase } from "@/modules/members/use-cases/change-member-status.use-case";
@@ -70,13 +70,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
 }
 
 export default function MembersListRoute() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const fetcher = useFetcher<typeof action>();
   const { members, total, totalPages, page, perPage, roles, groups, filters } = useLoaderData<typeof loader>();
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [search, setSearch] = useState(filters.search);
-  const [debouncedSearch] = useDebouncedValue(search, 250);
   const [saveFilterOpen, setSaveFilterOpen] = useState(false);
   const [filterName, setFilterName] = useState("");
   const [savedFilters, setSavedFilters] = useState<string[]>([]);
@@ -84,25 +81,8 @@ export default function MembersListRoute() {
   const roleNames = roles.map((role) => role.name);
   const groupNames = groups.map((group) => group.name);
 
-  useEffect(() => {
-    if (filters.search !== search) {
-      setSearch(filters.search);
-    }
-  }, [filters.search, search]);
-
-  useEffect(() => {
-    if (debouncedSearch === filters.search) return;
-    updateParams({ search: debouncedSearch || null });
-  }, [debouncedSearch]);
-
   const updateParams = (updates: Record<string, string | null>) => {
-    const next = new URLSearchParams(searchParams);
-    for (const [key, value] of Object.entries(updates)) {
-      if (!value || value === "Alle") next.delete(key);
-      else next.set(key, value);
-    }
-    if (!("page" in updates)) next.set("page", "1");
-    setSearchParams(next);
+    setSearchParams(buildSearchParams(searchParams, updates));
   };
 
   const toggleSort = (key: MemberListSortKey) => {
@@ -134,7 +114,7 @@ export default function MembersListRoute() {
     }
   };
 
-  const SortIcon = ({ sortKey }: { sortKey: MemberListSortKey }) => {
+  const renderSortIcon = (sortKey: MemberListSortKey) => {
     if (filters.sort !== sortKey) return null;
     return filters.dir === "asc"
       ? <ChevronUp className="h-3 w-3 inline ml-1" />
@@ -163,10 +143,12 @@ export default function MembersListRoute() {
           <div className="flex flex-wrap gap-2 mb-4">
             <div className="relative flex-1 min-w-[200px]">
               <TextInput
+                key={filters.search}
                 placeholder="Name, E-Mail oder Mitgliedsnummer suchen..."
                 leftSection={<Search className="h-4 w-4" />}
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                component={MemberSearchInput}
+                initialValue={filters.search}
+                onSearchChange={(value: string) => updateParams({ search: value || null })}
               />
             </div>
 
@@ -241,41 +223,37 @@ export default function MembersListRoute() {
                     <Checkbox checked={members.length > 0 && selected.size === members.length} onChange={toggleAll} />
                   </Table.Th>
                   <Table.Th className="cursor-pointer select-none" onClick={() => toggleSort("name")}>
-                    Name <SortIcon sortKey="name" />
+                    Name {renderSortIcon("name")}
                   </Table.Th>
                   <Table.Th className="hidden md:table-cell cursor-pointer select-none" onClick={() => toggleSort("email")}>
-                    E-Mail <SortIcon sortKey="email" />
+                    E-Mail {renderSortIcon("email")}
                   </Table.Th>
                   <Table.Th className="hidden lg:table-cell cursor-pointer select-none" onClick={() => toggleSort("memberNumber")}>
-                    Mitgliedsnr. <SortIcon sortKey="memberNumber" />
+                    Mitgliedsnr. {renderSortIcon("memberNumber")}
                   </Table.Th>
                   <Table.Th className="cursor-pointer select-none" onClick={() => toggleSort("status")}>
-                    Status <SortIcon sortKey="status" />
+                    Status {renderSortIcon("status")}
                   </Table.Th>
                   <Table.Th className="hidden md:table-cell">Rollen</Table.Th>
                   <Table.Th className="hidden lg:table-cell cursor-pointer select-none" onClick={() => toggleSort("joinDate")}>
-                    Beitritt <SortIcon sortKey="joinDate" />
+                    Beitritt {renderSortIcon("joinDate")}
                   </Table.Th>
                   <Table.Th style={{ width: 40 }} />
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
                 {members.map((member, index) => (
-                  <Table.Tr
-                    key={member.id}
-                    className={`cursor-pointer ${index % 2 === 1 ? "bg-card" : ""} hover:bg-muted/50`}
-                    onClick={() => navigate(`/members/${member.id}`)}
-                  >
+                  <Table.Tr key={member.id} className={index % 2 === 1 ? "bg-card" : undefined}>
                     <Table.Td onClick={(event) => event.stopPropagation()}>
                       <Checkbox checked={selected.has(member.id)} onChange={() => toggleOne(member.id)} />
                     </Table.Td>
                     <Table.Td>
-                      <div className="flex items-center gap-3">
+                      <Link to={`/members/${member.id}`} className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-primary-light flex items-center justify-center shrink-0">
                           <span className="text-primary-foreground text-xs font-semibold">{member.avatarInitials}</span>
                         </div>
                         <span className="font-medium">{member.firstName} {member.lastName}</span>
-                      </div>
+                      </Link>
                     </Table.Td>
                     <Table.Td className="hidden md:table-cell text-muted-foreground">{member.email}</Table.Td>
                     <Table.Td className="hidden lg:table-cell text-muted-foreground font-mono text-xs">{member.memberNumber}</Table.Td>
@@ -295,7 +273,7 @@ export default function MembersListRoute() {
                           <Button variant="subtle" size="sm" px={6}><MoreHorizontal className="h-4 w-4" /></Button>
                         </Menu.Target>
                         <Menu.Dropdown>
-                          <Menu.Item leftSection={<Pencil className="h-4 w-4" />} onClick={() => navigate(`/members/${member.id}`)}>
+                          <Menu.Item leftSection={<Pencil className="h-4 w-4" />} component={Link} to={`/members/${member.id}`}>
                             Bearbeiten
                           </Menu.Item>
                           <Menu.Item leftSection={<MessageSquare className="h-4 w-4" />}>Nachricht senden</Menu.Item>
@@ -370,5 +348,38 @@ export default function MembersListRoute() {
         </Group>
       </Modal>
     </div>
+  );
+}
+
+type MemberSearchInputProps = {
+  initialValue: string;
+  onSearchChange: (value: string) => void;
+};
+
+function MemberSearchInput({ initialValue, onSearchChange, ...props }: MemberSearchInputProps & ComponentPropsWithoutRef<"input">) {
+  const [value, setValue] = useState(initialValue);
+  const timeoutRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current);
+    }
+  }, []);
+
+  return (
+    <input
+      {...props}
+      value={value}
+      onChange={(event) => {
+        const nextValue = event.target.value;
+        setValue(nextValue);
+        if (timeoutRef.current !== null) {
+          window.clearTimeout(timeoutRef.current);
+        }
+        timeoutRef.current = window.setTimeout(() => {
+          onSearchChange(nextValue);
+        }, 250);
+      }}
+    />
   );
 }

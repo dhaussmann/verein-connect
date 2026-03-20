@@ -1,30 +1,42 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useState } from 'react';
-import { useLocation, useLoaderData, useNavigate, useNavigation } from 'react-router';
+import { Link, useLoaderData, useSearchParams } from 'react-router';
 import type { LoaderFunctionArgs } from 'react-router';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, Button, Badge, Select, Progress, Text, Group } from '@mantine/core';
 import { Clock, MapPin } from 'lucide-react';
-import { Skeleton } from '@/components/ui/skeleton';
+import { RoutePendingOverlay } from '@/components/ui/route-pending-overlay';
+import { useRoutePending } from '@/hooks/use-route-pending';
+import { buildSearchParams } from '@/lib/search-params';
 import { requireRouteData } from '@/core/runtime/route';
-import { listTodayAttendanceEventsUseCase } from '@/modules/attendance/use-cases/attendance.use-cases';
+import { listAttendanceEventsUseCase } from '@/modules/attendance/use-cases/attendance.use-cases';
+
+function getDateRange(range: string) {
+  const start = new Date();
+  const end = new Date(start);
+
+  if (range === 'week') end.setDate(end.getDate() + 6);
+  if (range === 'month') end.setMonth(end.getMonth() + 1);
+
+  return {
+    startDate: start.toISOString().slice(0, 10),
+    endDate: range === 'today' ? undefined : end.toISOString().slice(0, 10),
+  };
+}
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
-  const today = new Date().toISOString().slice(0, 10);
-  const eventsData = await listTodayAttendanceEventsUseCase(env, user.orgId, today);
+  const url = new URL(request.url);
+  const range = url.searchParams.get('range') || 'today';
+  const eventsData = await listAttendanceEventsUseCase(env, user.orgId, getDateRange(range));
   return { eventsData };
 }
 
 export default function AttendanceIndexRoute() {
   const { eventsData } = useLoaderData<typeof loader>();
-  const [dateFilter, setDateFilter] = useState('today');
-  const navigate = useNavigate();
-  const location = useLocation();
-  const navigation = useNavigation();
-
-  const isLoading = navigation.state === 'loading' && navigation.location?.pathname === location.pathname;
-  const todayEvents = eventsData?.data ?? [];
+  const [searchParams, setSearchParams] = useSearchParams();
+  const dateFilter = searchParams.get('range') || 'today';
+  const { isSearchPending } = useRoutePending();
+  const attendanceEvents = eventsData?.data ?? [];
 
   return (
     <div>
@@ -32,7 +44,7 @@ export default function AttendanceIndexRoute() {
         <div className="mt-4">
           <Select
             value={dateFilter}
-            onChange={(v) => setDateFilter(v ?? 'today')}
+            onChange={(v) => setSearchParams(buildSearchParams(searchParams, { range: v ?? 'today' }, { resetPageOnChange: false }))}
             w={192}
             data={[
               { value: 'today', label: 'Heute' },
@@ -43,16 +55,16 @@ export default function AttendanceIndexRoute() {
         </div>
       </PageHeader>
 
-      {!isLoading && todayEvents.length === 0 && (
-        <Text c="dimmed" ta="center" py="xl">Heute keine Termine vorhanden.</Text>
+      {attendanceEvents.length === 0 && (
+        <Text c="dimmed" ta="center" py="xl">
+          {dateFilter === 'today' ? 'Heute keine Termine vorhanden.' : 'Keine Termine im gewählten Zeitraum vorhanden.'}
+        </Text>
       )}
 
-      {/* Today's Events Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        {(isLoading ? Array.from({ length: 6 }) : todayEvents).map((event, index) => {
-          if (isLoading) {
-            return <AttendanceCardSkeleton key={index} />;
-          }
+      <div className="relative mb-8">
+        <RoutePendingOverlay visible={isSearchPending} />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {attendanceEvents.map((event) => {
           const pct = event.maxParticipants > 0 ? (event.participants / event.maxParticipants) * 100 : 0;
           return (
             <Card key={event.id} withBorder>
@@ -76,13 +88,14 @@ export default function AttendanceIndexRoute() {
                   </Group>
                   <Progress value={pct} size="sm" />
                 </div>
-                <Button fullWidth onClick={() => navigate(`/attendance/${event.id}`)}>
+                <Button fullWidth component={Link} to={`/attendance/${event.id}`}>
                   Check-In starten
                 </Button>
               </div>
             </Card>
           );
         })}
+      </div>
       </div>
 
       {/* Statistics placeholder */}
@@ -93,30 +106,5 @@ export default function AttendanceIndexRoute() {
         </Text>
       </Card>
     </div>
-  );
-}
-
-function AttendanceCardSkeleton() {
-  return (
-    <Card withBorder>
-      <div className="space-y-3">
-        <Group justify="space-between" align="flex-start">
-          <div style={{ flex: 1 }}>
-            <Skeleton h={16} w="60%" mb={8} />
-            <Skeleton h={12} w="52%" mb={6} />
-            <Skeleton h={12} w="48%" />
-          </div>
-          <Skeleton h={20} w={74} radius="xl" />
-        </Group>
-        <div>
-          <Group justify="space-between" mb={4}>
-            <Skeleton h={12} w="32%" />
-            <Skeleton h={12} w={44} />
-          </Group>
-          <Skeleton h={8} radius="xl" />
-        </div>
-        <Skeleton h={36} radius="sm" />
-      </div>
-    </Card>
   );
 }

@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useFetcher, useLoaderData } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import {
@@ -26,6 +26,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
   const formData = await request.formData();
   const intent = String(formData.get('intent') || '');
+  const requestId = String(formData.get('requestId') || '');
 
   try {
     if (intent === 'create') {
@@ -36,7 +37,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         color: String(formData.get('color') || '#3b82f6'),
         sortOrder: Number(formData.get('sortOrder') || 0),
       });
-      return { success: true, intent };
+      return { success: true, intent, requestId };
     }
     if (intent === 'update') {
       await updateMembershipLevelUseCase(env, {
@@ -47,20 +48,20 @@ export async function action({ request, context }: ActionFunctionArgs) {
         color: String(formData.get('color') || '#3b82f6'),
         sortOrder: Number(formData.get('sortOrder') || 0),
       });
-      return { success: true, intent };
+      return { success: true, intent, requestId };
     }
     if (intent === 'delete') {
       await deleteMembershipLevelUseCase(env, {
         orgId: user.orgId,
         levelId: String(formData.get('id') || ''),
       });
-      return { success: true, intent };
+      return { success: true, intent, requestId };
     }
   } catch (error) {
-    return { success: false, intent, error: error instanceof Error ? error.message : 'Aktion fehlgeschlagen' };
+    return { success: false, intent, error: error instanceof Error ? error.message : 'Aktion fehlgeschlagen', requestId };
   }
 
-  return { error: 'Unbekannte Aktion' };
+  return { error: 'Unbekannte Aktion', requestId };
 }
 
 type Level = { id: string; name: string; description: string | null; color: string | null; sortOrder: number | null; isDefault: number | null };
@@ -71,25 +72,15 @@ export default function MembershipLevelsSettings() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Level | null>(null);
   const [form, setForm] = useState({ name: '', description: '', color: '#3b82f6', sortOrder: '0' });
-
-  useEffect(() => {
-    if (!fetcher.data) return;
-    if (fetcher.data.error) {
-      notifications.show({ color: 'red', message: fetcher.data.error });
-      return;
-    }
-    if (fetcher.data.success) {
-      if (fetcher.data.intent === 'create') notifications.show({ color: 'green', message: 'Stufe erstellt' });
-      else if (fetcher.data.intent === 'update') notifications.show({ color: 'green', message: 'Stufe aktualisiert' });
-      else if (fetcher.data.intent === 'delete') notifications.show({ color: 'green', message: 'Stufe gelöscht' });
-      setModalOpen(false);
-      setEditing(null);
-    }
-  }, [fetcher.data]);
+  const [editorRequestId, setEditorRequestId] = useState(() => crypto.randomUUID());
+  const isLevelSaved = fetcher.data?.success
+    && (fetcher.data.intent === 'create' || fetcher.data.intent === 'update')
+    && fetcher.data.requestId === editorRequestId;
 
   function openCreate() {
     setEditing(null);
     setForm({ name: '', description: '', color: '#3b82f6', sortOrder: '0' });
+    setEditorRequestId(crypto.randomUUID());
     setModalOpen(true);
   }
 
@@ -101,6 +92,7 @@ export default function MembershipLevelsSettings() {
       color: level.color ?? '#3b82f6',
       sortOrder: String(level.sortOrder ?? 0),
     });
+    setEditorRequestId(crypto.randomUUID());
     setModalOpen(true);
   }
 
@@ -111,6 +103,7 @@ export default function MembershipLevelsSettings() {
       description: form.description,
       color: form.color,
       sortOrder: form.sortOrder,
+      requestId: editorRequestId,
     };
     if (editing) data.id = editing.id;
     fetcher.submit(data, { method: 'post' });
@@ -122,6 +115,15 @@ export default function MembershipLevelsSettings() {
         <Text fw={600} size="lg">Mitgliedsstufen</Text>
         <Button leftSection={<Plus size={14} />} onClick={openCreate}>Neue Stufe</Button>
       </Group>
+
+      {fetcher.data?.error && (
+        <Text c="red" size="sm" mb="sm">{fetcher.data.error}</Text>
+      )}
+      {fetcher.data?.success && (
+        <Text c="green" size="sm" mb="sm">
+          {fetcher.data.intent === 'create' ? 'Stufe erstellt.' : fetcher.data.intent === 'update' ? 'Stufe aktualisiert.' : 'Stufe gelöscht.'}
+        </Text>
+      )}
 
       <Card shadow="sm">
         <Table>
@@ -178,7 +180,7 @@ export default function MembershipLevelsSettings() {
       </Card>
 
       <Modal
-        opened={modalOpen}
+        opened={modalOpen && !isLevelSaved}
         onClose={() => setModalOpen(false)}
         title={editing ? 'Stufe bearbeiten' : 'Neue Stufe'}
       >

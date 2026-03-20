@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { Tarif, MembershipType, Group, TarifPricing } from '@/lib/api';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import {
@@ -155,14 +155,36 @@ interface Props {
 }
 
 export default function TarifDialog({ open, onOpenChange, editItem, groups, membershipTypes, onSave, saving }: Props) {
-  const [form, setForm] = useState<TarifFormData>(emptyForm());
   const isEdit = !!editItem;
 
-  useEffect(() => {
-    if (open) {
-      setForm(editItem ? fromTarif(editItem) : emptyForm());
-    }
-  }, [open, editItem]);
+  return (
+    <Modal
+      opened={open}
+      onClose={() => onOpenChange(false)}
+      title={isEdit ? 'Tarif bearbeiten' : 'Neuer Tarif'}
+      size="xl"
+      styles={{ body: { maxHeight: '80vh', overflowY: 'auto' } }}
+    >
+      {open && (
+        <TarifDialogForm
+          key={editItem?.id ?? 'new'}
+          editItem={editItem}
+          groups={groups}
+          membershipTypes={membershipTypes}
+          onOpenChange={onOpenChange}
+          onSave={onSave}
+          saving={saving}
+        />
+      )}
+    </Modal>
+  );
+}
+
+type TarifDialogFormProps = Pick<Props, 'editItem' | 'groups' | 'membershipTypes' | 'onOpenChange' | 'onSave' | 'saving'>;
+
+function TarifDialogForm({ editItem, groups, membershipTypes, onOpenChange, onSave, saving }: TarifDialogFormProps) {
+  const [form, setForm] = useState<TarifFormData>(() => editItem ? fromTarif(editItem) : emptyForm());
+  const isEdit = !!editItem;
 
   const set = (key: keyof TarifFormData, value: any) =>
     setForm(prev => ({ ...prev, [key]: value }));
@@ -204,13 +226,7 @@ export default function TarifDialog({ open, onOpenChange, editItem, groups, memb
   const showRenewal = form.contract_type === 'AUTO_RENEW' || form.contract_type === 'FIXED_RENEW';
 
   return (
-    <Modal
-      opened={open}
-      onClose={() => onOpenChange(false)}
-      title={isEdit ? 'Tarif bearbeiten' : 'Neuer Tarif'}
-      size="xl"
-      styles={{ body: { maxHeight: '80vh', overflowY: 'auto' } }}
-    >
+    <>
       <Tabs defaultValue="basisdaten" mt="xs">
         <Tabs.List grow>
           <Tabs.Tab value="basisdaten">BASISDATEN</Tabs.Tab>
@@ -529,6 +545,7 @@ export default function TarifDialog({ open, onOpenChange, editItem, groups, memb
         </Button>
         <Button variant="outline" onClick={() => onOpenChange(false)}>SCHLIESSEN</Button>
       </div>
-    </Modal>
+
+    </>
   );
 }

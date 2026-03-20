@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useEffect, useState } from 'react';
-import { useFetcher, useLoaderData, useNavigate } from 'react-router';
+import { Link, redirect, useFetcher, useLoaderData } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -62,7 +62,7 @@ export async function action({ request, context, params }: ActionFunctionArgs) {
         memberId,
         hardDelete: true,
       });
-      return { success: true, intent, redirectTo: "/members" };
+      return redirect("/members");
     }
     if (intent === "add-group-member") {
       const groupId = String(formData.get("groupId") || "");
@@ -165,7 +165,6 @@ export async function action({ request, context, params }: ActionFunctionArgs) {
 }
 
 export default function MemberDetail() {
-  const navigate = useNavigate();
   const { member, contracts, groups, roles, profileFields: profileFieldDefinitions, bankAccount, guardians } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [editing, setEditing] = useState(false);
@@ -192,10 +191,6 @@ export default function MemberDetail() {
 
     if (fetcher.data.intent === 'deactivate-member') {
       notifications.show({ color: 'green', message: 'Mitglied deaktiviert' });
-    } else if (fetcher.data.intent === 'delete-member') {
-      notifications.show({ color: 'green', message: 'Mitglied gelöscht' });
-      navigate(fetcher.data.redirectTo || '/members');
-      return;
     } else if (fetcher.data.intent === 'remove-group-member') {
       notifications.show({ color: 'green', message: 'Gruppe entfernt' });
     } else if (fetcher.data.intent === 'add-group-member') {
@@ -217,7 +212,7 @@ export default function MemberDetail() {
     } else if (fetcher.data.intent === 'delete-guardian') {
       notifications.show({ color: 'green', message: 'Erziehungsberechtigter gelöscht' });
     }
-  }, [fetcher.data, navigate]);
+  }, [fetcher.data]);
 
   const roleAssignments = member.roles.map((r: string) => ({ role: r, startDate: member.joinDate }));
 
@@ -470,7 +465,7 @@ export default function MemberDetail() {
             <Card.Section p="md">
               <Group justify="space-between" mb="xs">
                 <Text fw={600} size="sm">Verträge</Text>
-                <Button size="xs" leftSection={<FileText size={14} />} onClick={() => navigate('/contracts/new')}>
+                <Button size="xs" leftSection={<FileText size={14} />} component={Link} to="/contracts/new">
                   Neuer Vertrag
                 </Button>
               </Group>
@@ -491,12 +486,8 @@ export default function MemberDetail() {
                   </Table.Thead>
                   <Table.Tbody>
                     {contracts.map((c) => (
-                      <Table.Tr
-                        key={c.id}
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => navigate(`/contracts/${c.id}`)}
-                      >
-                        <Table.Td><Text size="xs" ff="monospace">{c.contractNumber}</Text></Table.Td>
+                      <Table.Tr key={c.id}>
+                        <Table.Td><Text size="xs" ff="monospace"><Link to={`/contracts/${c.id}`}>{c.contractNumber}</Link></Text></Table.Td>
                         <Table.Td>{c.contractKind === 'MEMBERSHIP' ? 'Mitgliedschaft' : 'Tarif'}</Table.Td>
                         <Table.Td>{c.typeName || '–'}</Table.Td>
                         <Table.Td><Text size="sm" c="dimmed">{c.startDate ? new Date(c.startDate).toLocaleDateString('de-DE') : '–'}</Text></Table.Td>

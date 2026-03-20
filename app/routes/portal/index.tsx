@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useLoaderData, useNavigate, useRouteLoaderData } from 'react-router';
+import { Link, useLoaderData, useRouteLoaderData } from 'react-router';
 import type { LoaderFunctionArgs } from 'react-router';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, Badge, Button, Text, Group } from '@mantine/core';
@@ -32,7 +32,6 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
 export default function PortalIndexRoute() {
   const loaderData = useLoaderData<typeof loader>() as { data: PortalDashboardData };
   const { data } = loaderData;
-  const navigate = useNavigate();
   const { user } = (useRouteLoaderData('root') as RootLoaderData) ?? {};
 
   const roleLabel = (r: string) => {
@@ -46,7 +45,7 @@ export default function PortalIndexRoute() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <Card withBorder style={{ cursor: 'pointer' }} onClick={() => navigate('/portal/courses')}>
+        <Card withBorder component={Link} to="/portal/courses" style={{ cursor: 'pointer' }}>
           <Card.Section p="md">
             <Group gap="md">
               <div className="p-3 rounded-xl bg-primary/10">
@@ -104,7 +103,7 @@ export default function PortalIndexRoute() {
         <Card.Section p="md">
           <Group justify="space-between" mb="sm">
             <Text fw={600} size="sm">Nächste Termine</Text>
-            <Button variant="subtle" size="sm" rightSection={<ChevronRight size={16} />} onClick={() => navigate('/portal/events')}>
+            <Button variant="subtle" size="sm" rightSection={<ChevronRight size={16} />} component={Link} to="/portal/attendance">
               Alle anzeigen
             </Button>
           </Group>
@@ -140,13 +139,13 @@ export default function PortalIndexRoute() {
 
       {/* Quick Links */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
-        <Button variant="outline" style={{ height: 'auto', paddingTop: 16, paddingBottom: 16, justifyContent: 'flex-start' }} onClick={() => navigate('/portal/profile')}>
+        <Button variant="outline" style={{ height: 'auto', paddingTop: 16, paddingBottom: 16, justifyContent: 'flex-start' }} component={Link} to="/portal/profile">
           <div className="text-left">
             <Text fw={500}>Mein Profil</Text>
             <Text size="xs" c="dimmed">Persönliche Daten einsehen &amp; bearbeiten</Text>
           </div>
         </Button>
-        <Button variant="outline" style={{ height: 'auto', paddingTop: 16, paddingBottom: 16, justifyContent: 'flex-start' }} onClick={() => navigate('/portal/courses')}>
+        <Button variant="outline" style={{ height: 'auto', paddingTop: 16, paddingBottom: 16, justifyContent: 'flex-start' }} component={Link} to="/portal/courses">
           <div className="text-left">
             <Text fw={500}>Meine Kurse</Text>
             <Text size="xs" c="dimmed">Angemeldete Kurse &amp; Termine</Text>

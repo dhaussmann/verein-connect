@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useEffect, useState } from 'react';
-import { useActionData, useLoaderData, useNavigate, useNavigation } from 'react-router';
+import { Link, redirect, useActionData, useLoaderData, useNavigation } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -41,7 +41,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
       actorUserId: user.id,
       payload: JSON.parse(String(formData.get("payload") || "{}")),
     });
-    return { success: true };
+    return redirect('/courses');
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Erstellen fehlgeschlagen" };
   }
@@ -51,7 +51,6 @@ export default function CourseNewRoute() {
   const { membersData } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigationState = useNavigation().state;
-  const navigate = useNavigate();
   const [eventType, setEventType] = useState('Einmalig');
   const [costEnabled, setCostEnabled] = useState(false);
   const [waitlistEnabled, setWaitlistEnabled] = useState(true);
@@ -69,17 +68,14 @@ export default function CourseNewRoute() {
   const trainers = (membersData?.data ?? []).filter((m: { roles?: string[] }) => m.roles?.includes('Trainer') || m.roles?.includes('trainer'));
 
   useEffect(() => {
-    if (actionData?.success) {
-      notifications.show({ color: 'green', message: 'Kurs/Termin wurde erfolgreich erstellt!' });
-      navigate('/courses');
-    } else if (actionData?.error) {
+    if (actionData?.error) {
       notifications.show({ color: 'red', message: actionData.error });
     }
-  }, [actionData, navigate]);
+  }, [actionData]);
 
   return (
     <div>
-      <Button variant="subtle" mb="md" leftSection={<ArrowLeft size={16} />} onClick={() => navigate(-1)}>
+      <Button variant="subtle" mb="md" leftSection={<ArrowLeft size={16} />} component={Link} to="/courses">
         Zurück
       </Button>
       <PageHeader title="Neuer Kurs / Termin" />
@@ -248,7 +244,7 @@ export default function CourseNewRoute() {
           <Divider />
 
           <Group justify="flex-end" pb="xl">
-            <Button variant="subtle" type="button" onClick={() => navigate(-1)}>Abbrechen</Button>
+            <Button variant="subtle" type="button" component={Link} to="/courses">Abbrechen</Button>
             <Button type="submit" disabled={navigationState === 'submitting'}>
               {navigationState === 'submitting' ? 'Wird erstellt...' : 'Kurs erstellen'}
             </Button>

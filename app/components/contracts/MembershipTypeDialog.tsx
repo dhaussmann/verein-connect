@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { MembershipType, Group, TarifPricing } from '@/lib/api';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import {
@@ -150,14 +150,35 @@ interface Props {
 }
 
 export default function MembershipTypeDialog({ open, onOpenChange, editItem, groups, onSave, saving }: Props) {
-  const [form, setForm] = useState<MembershipTypeFormData>(emptyForm());
   const isEdit = !!editItem;
 
-  useEffect(() => {
-    if (open) {
-      setForm(editItem ? fromMembershipType(editItem) : emptyForm());
-    }
-  }, [open, editItem]);
+  return (
+    <Modal
+      opened={open}
+      onClose={() => onOpenChange(false)}
+      title={isEdit ? 'Mitgliedsart bearbeiten' : 'Neue Mitgliedsart'}
+      size="xl"
+      styles={{ body: { maxHeight: '80vh', overflowY: 'auto' } }}
+    >
+      {open && (
+        <MembershipTypeDialogForm
+          key={editItem?.id ?? 'new'}
+          editItem={editItem}
+          groups={groups}
+          onOpenChange={onOpenChange}
+          onSave={onSave}
+          saving={saving}
+        />
+      )}
+    </Modal>
+  );
+}
+
+type MembershipTypeDialogFormProps = Pick<Props, 'editItem' | 'groups' | 'onOpenChange' | 'onSave' | 'saving'>;
+
+function MembershipTypeDialogForm({ editItem, groups, onOpenChange, onSave, saving }: MembershipTypeDialogFormProps) {
+  const [form, setForm] = useState<MembershipTypeFormData>(() => editItem ? fromMembershipType(editItem) : emptyForm());
+  const isEdit = !!editItem;
 
   const set = (key: keyof MembershipTypeFormData, value: any) =>
     setForm(prev => ({ ...prev, [key]: value }));
@@ -190,13 +211,7 @@ export default function MembershipTypeDialog({ open, onOpenChange, editItem, gro
   const showRenewal = form.contract_type === 'AUTO_RENEW' || form.contract_type === 'FIXED_RENEW';
 
   return (
-    <Modal
-      opened={open}
-      onClose={() => onOpenChange(false)}
-      title={isEdit ? 'Mitgliedsart bearbeiten' : 'Neue Mitgliedsart'}
-      size="xl"
-      styles={{ body: { maxHeight: '80vh', overflowY: 'auto' } }}
-    >
+    <>
       <Tabs defaultValue="basisdaten" mt="xs">
         <Tabs.List grow>
           <Tabs.Tab value="basisdaten">BASISDATEN</Tabs.Tab>
@@ -495,6 +510,7 @@ export default function MembershipTypeDialog({ open, onOpenChange, editItem, gro
         </Button>
         <Button variant="outline" onClick={() => onOpenChange(false)}>SCHLIESSEN</Button>
       </div>
-    </Modal>
+
+    </>
   );
 }

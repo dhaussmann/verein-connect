@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useMemo, useState } from "react";
-import { Form, useActionData, useLoaderData, useNavigation, useNavigate } from "react-router";
+import { Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import {
   Button, ActionIcon, Card, Text, Group, Stack, Badge,
@@ -54,7 +54,6 @@ export async function action({ request, context, params }: ActionFunctionArgs) {
 }
 
 export default function GroupDetailRoute() {
-  const navigate = useNavigate();
   const { group, groupMembers, availableMembers } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -75,7 +74,7 @@ export default function GroupDetailRoute() {
     return (
       <div>
         <PageHeader title="Gruppe nicht gefunden" />
-        <Button variant="outline" onClick={() => navigate("/groups")} leftSection={<ArrowLeft size={16} />}>
+        <Button variant="outline" component={Link} to="/groups" leftSection={<ArrowLeft size={16} />}>
           Zurück
         </Button>
       </div>
@@ -87,7 +86,7 @@ export default function GroupDetailRoute() {
       <PageHeader
         title={group.name}
         action={
-          <Button variant="outline" size="sm" onClick={() => navigate("/groups")} leftSection={<ArrowLeft size={16} />}>
+          <Button variant="outline" size="sm" component={Link} to="/groups" leftSection={<ArrowLeft size={16} />}>
             Zurück
           </Button>
         }
@@ -160,12 +159,10 @@ export default function GroupDetailRoute() {
             </Table.Thead>
             <Table.Tbody>
               {groupMembers.map((member) => (
-                <Table.Tr
-                  key={member.id}
-                  style={{ cursor: "pointer" }}
-                  onClick={() => navigate(`/members/${member.userId}`)}
-                >
-                  <Table.Td fw={500}>{member.firstName} {member.lastName}</Table.Td>
+                <Table.Tr key={member.id}>
+                  <Table.Td fw={500}>
+                    <Link to={`/members/${member.userId}`}>{member.firstName} {member.lastName}</Link>
+                  </Table.Td>
                   <Table.Td c="dimmed">{member.email}</Table.Td>
                   <Table.Td c="dimmed">
                     {member.joinedAt ? new Date(member.joinedAt).toLocaleDateString("de-DE") : "–"}
