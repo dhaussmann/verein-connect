@@ -36,7 +36,6 @@ CREATE TABLE IF NOT EXISTS membership_types (
   cancellation_notice_days INTEGER DEFAULT 30,
   cancellation_notice_basis TEXT DEFAULT 'FROM_CANCELLATION',
   renewal_cancellation_days INTEGER,
-  default_group_id TEXT REFERENCES groups(id),
   sort_order INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
@@ -63,7 +62,6 @@ CREATE TABLE IF NOT EXISTS tarifs (
   cancellation_notice_days INTEGER DEFAULT 30,
   cancellation_notice_basis TEXT DEFAULT 'FROM_CANCELLATION',
   renewal_cancellation_days INTEGER,
-  default_group_id TEXT REFERENCES groups(id),
   allowed_membership_type_ids TEXT DEFAULT '[]',
   sort_order INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),
