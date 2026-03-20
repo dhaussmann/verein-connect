@@ -44,6 +44,9 @@ export interface Role {
   id: string;
   name: string;
   category: string;
+  roleType: string;
+  scope: string;
+  isAssignable: boolean;
   memberCount: number;
   isSystem: boolean;
   description: string;
@@ -74,7 +77,7 @@ export interface Event {
   timeEnd: string;
   isPublic: boolean;
   showOnHomepage: boolean;
-  targetRoles: string[];
+  targetGroups: string[];
   autoInvoice: boolean;
   eventType: string;
   leaders: { userId: string; name: string; roleLabel: string }[];
@@ -214,8 +217,7 @@ export interface MembershipType {
   cancellationNoticeDays: number;
   cancellationNoticeBasis: string;
   renewalCancellationDays: number | null;
-  defaultGroupId: string | null;
-  groupName: string;
+  applicationRequirements: string[];
   sortOrder: number;
   pricing: TarifPricing[];
   createdAt: string;
@@ -242,6 +244,17 @@ export interface Group {
   name: string;
   description: string | null;
   category: string | null;
+  groupType: string | null;
+  ageBand: string | null;
+  genderScope: string | null;
+  season: string | null;
+  league: string | null;
+  location: string | null;
+  trainingFocus: string | null;
+  visibility: string | null;
+  admissionOpen: boolean;
+  maxMembers: number | null;
+  maxGoalies: number | null;
   createdAt: string;
 }
 

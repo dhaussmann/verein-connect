@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import type { Tarif, MembershipType, Group, TarifPricing } from '@/lib/api';
+import type { Tarif, MembershipType, TarifPricing } from '@/lib/api';
+import { applicationRequirementOptions } from '@/modules/contracts/application-requirements';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import {
-  Button, TextInput, Textarea, Tabs, Switch, Checkbox,
+  Button, TextInput, Textarea, Tabs, Checkbox,
   Radio, Select, Modal,
 } from '@mantine/core';
 import { Trash2, Plus } from 'lucide-react';
@@ -42,7 +43,6 @@ interface PricingRow {
 interface TarifFormData {
   name: string;
   is_active: boolean;
-  default_group_id: string;
   short_description: string;
   description: string;
   bank_account_id: string;
@@ -56,8 +56,8 @@ interface TarifFormData {
   cancellation_notice_basis: string;
   renewal_duration_months: string;
   renewal_cancellation_days: string;
-  self_registration_enabled: boolean;
   sort_order: string;
+  application_requirements: string[];
   pricing: PricingRow[];
   allowed_membership_type_ids: string[];
 }
@@ -66,7 +66,6 @@ function emptyForm(): TarifFormData {
   return {
     name: '',
     is_active: true,
-    default_group_id: '',
     short_description: '',
     description: '',
     bank_account_id: '',
@@ -80,8 +79,8 @@ function emptyForm(): TarifFormData {
     cancellation_notice_basis: 'FROM_CANCELLATION',
     renewal_duration_months: '1',
     renewal_cancellation_days: '1',
-    self_registration_enabled: false,
     sort_order: '0',
+    application_requirements: [],
     pricing: [{ billing_period: 'MONTHLY', price: '' }],
     allowed_membership_type_ids: [],
   };
@@ -91,7 +90,6 @@ function fromTarif(t: Tarif): TarifFormData {
   return {
     name: t.name,
     is_active: t.isActive === 1,
-    default_group_id: t.defaultGroupId || '',
     short_description: t.shortDescription || '',
     description: t.description || '',
     bank_account_id: t.bankAccountId || '',
@@ -105,8 +103,8 @@ function fromTarif(t: Tarif): TarifFormData {
     cancellation_notice_basis: t.cancellationNoticeBasis || 'FROM_CANCELLATION',
     renewal_duration_months: String(t.renewalDurationMonths ?? 1),
     renewal_cancellation_days: String(t.renewalCancellationDays ?? 1),
-    self_registration_enabled: t.selfRegistrationEnabled === 1,
     sort_order: String(t.sortOrder ?? 0),
+    application_requirements: t.applicationRequirements || [],
     pricing: t.pricing?.length
       ? t.pricing.map(p => ({ billing_period: p.billingPeriod, price: String(p.price) }))
       : [{ billing_period: 'MONTHLY', price: '' }],
@@ -118,7 +116,6 @@ export function toTarifApiPayload(form: TarifFormData) {
   return {
     name: form.name,
     is_active: form.is_active,
-    self_registration_enabled: form.self_registration_enabled,
     short_description: form.short_description || undefined,
     description: form.description || undefined,
     bank_account_id: form.bank_account_id || undefined,
@@ -132,7 +129,7 @@ export function toTarifApiPayload(form: TarifFormData) {
     cancellation_notice_days: parseInt(form.cancellation_notice_days) || 30,
     cancellation_notice_basis: form.cancellation_notice_basis,
     renewal_cancellation_days: parseInt(form.renewal_cancellation_days) || undefined,
-    default_group_id: form.default_group_id || null,
+    application_requirements: form.application_requirements,
     sort_order: parseInt(form.sort_order) || 0,
     allowed_membership_type_ids: form.allowed_membership_type_ids,
     pricing: form.pricing
@@ -148,13 +145,12 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editItem: Tarif | null;
-  groups: Group[];
   membershipTypes: MembershipType[];
   onSave: (data: ReturnType<typeof toTarifApiPayload>, isEdit: boolean, id?: string) => Promise<void>;
   saving: boolean;
 }
 
-export default function TarifDialog({ open, onOpenChange, editItem, groups, membershipTypes, onSave, saving }: Props) {
+export default function TarifDialog({ open, onOpenChange, editItem, membershipTypes, onSave, saving }: Props) {
   const isEdit = !!editItem;
 
   return (
@@ -169,7 +165,6 @@ export default function TarifDialog({ open, onOpenChange, editItem, groups, memb
         <TarifDialogForm
           key={editItem?.id ?? 'new'}
           editItem={editItem}
-          groups={groups}
           membershipTypes={membershipTypes}
           onOpenChange={onOpenChange}
           onSave={onSave}
@@ -180,9 +175,9 @@ export default function TarifDialog({ open, onOpenChange, editItem, groups, memb
   );
 }
 
-type TarifDialogFormProps = Pick<Props, 'editItem' | 'groups' | 'membershipTypes' | 'onOpenChange' | 'onSave' | 'saving'>;
+type TarifDialogFormProps = Pick<Props, 'editItem' | 'membershipTypes' | 'onOpenChange' | 'onSave' | 'saving'>;
 
-function TarifDialogForm({ editItem, groups, membershipTypes, onOpenChange, onSave, saving }: TarifDialogFormProps) {
+function TarifDialogForm({ editItem, membershipTypes, onOpenChange, onSave, saving }: TarifDialogFormProps) {
   const [form, setForm] = useState<TarifFormData>(() => editItem ? fromTarif(editItem) : emptyForm());
   const isEdit = !!editItem;
 
@@ -218,6 +213,15 @@ function TarifDialogForm({ editItem, groups, membershipTypes, onOpenChange, onSa
     });
   };
 
+  const toggleRequirement = (value: string) => {
+    setForm(prev => {
+      const values = prev.application_requirements.includes(value)
+        ? prev.application_requirements.filter(item => item !== value)
+        : [...prev.application_requirements, value];
+      return { ...prev, application_requirements: values };
+    });
+  };
+
   const handleSave = async () => {
     const payload = toTarifApiPayload(form);
     await onSave(payload, isEdit, editItem?.id);
@@ -230,7 +234,7 @@ function TarifDialogForm({ editItem, groups, membershipTypes, onOpenChange, onSa
       <Tabs defaultValue="basisdaten" mt="xs">
         <Tabs.List grow>
           <Tabs.Tab value="basisdaten">BASISDATEN</Tabs.Tab>
-          <Tabs.Tab value="automatisierung">AUTOMATISIERUNG</Tabs.Tab>
+          <Tabs.Tab value="automatisierung">DARSTELLUNG</Tabs.Tab>
         </Tabs.List>
 
         {/* ─── Tab: Basisdaten ─── */}
@@ -257,18 +261,6 @@ function TarifDialogForm({ editItem, groups, membershipTypes, onOpenChange, onSa
                 <p className="text-xs text-muted-foreground mt-1">Erlaubt das Erstellen neuer Verträge</p>
               </div>
             </div>
-
-            {/* Standardgruppe */}
-            <Select
-              label={<span className="text-xs uppercase text-muted-foreground">Standardgruppe für Verträge</span>}
-              placeholder="Standardgruppe für Verträge"
-              value={form.default_group_id || '__none__'}
-              onChange={v => set('default_group_id', v === '__none__' ? '' : v ?? '')}
-              data={[
-                { value: '__none__', label: 'Keine' },
-                ...groups.map(g => ({ value: g.id, label: g.name })),
-              ]}
-            />
 
             {/* Erlaubte Mitgliedschaftsarten */}
             {membershipTypes.length > 0 && (
@@ -301,6 +293,20 @@ function TarifDialogForm({ editItem, groups, membershipTypes, onOpenChange, onSa
               <p className="text-xs text-muted-foreground mt-1">
                 {form.short_description.length} / 100 — Kurzbeschreibung des Tarifs
               </p>
+            </div>
+
+            <div>
+              <p className="text-xs uppercase text-muted-foreground mb-1">Pflichtangaben im Beitrittsantrag</p>
+              <div className="border rounded-md p-3 space-y-2">
+                {applicationRequirementOptions.map((option) => (
+                  <Checkbox
+                    key={option.value}
+                    label={option.label}
+                    checked={form.application_requirements.includes(option.value)}
+                    onChange={() => toggleRequirement(option.value)}
+                  />
+                ))}
+              </div>
             </div>
 
             {/* Beschreibung (Rich-Text) */}
@@ -509,19 +515,6 @@ function TarifDialogForm({ editItem, groups, membershipTypes, onOpenChange, onSa
         {/* ─── Tab: Automatisierung ─── */}
         <Tabs.Panel value="automatisierung" pt="md">
           <div className="space-y-6">
-            <div className="flex items-center justify-between p-4 border rounded-md">
-              <div>
-                <p className="font-medium">Selbstregistrierung aktivieren</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Mitglieder können sich online für diesen Tarif anmelden
-                </p>
-              </div>
-              <Switch
-                checked={form.self_registration_enabled}
-                onChange={e => set('self_registration_enabled', e.currentTarget.checked)}
-              />
-            </div>
-
             <div>
               <TextInput
                 label={<span className="text-xs uppercase text-muted-foreground">Sortierung</span>}
@@ -531,7 +524,7 @@ function TarifDialogForm({ editItem, groups, membershipTypes, onOpenChange, onSa
                 style={{ width: '6rem' }}
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Bestimmt die Reihenfolge in Listen und bei der Selbstregistrierung
+                Bestimmt die Reihenfolge in Listen
               </p>
             </div>
           </div>

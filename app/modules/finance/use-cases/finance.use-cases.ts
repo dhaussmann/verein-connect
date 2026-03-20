@@ -20,7 +20,13 @@ export async function getInvoicesDataUseCase(
   filters: { search?: string; status?: string } = {},
 ) {
   const repo = financeRepository(env);
-  const rows = await repo.listInvoicesByOrg(orgId);
+  const matchingUsers = filters.search ? await repo.findUsersByOrgAndName(orgId, filters.search) : [];
+  const userSearchIds = matchingUsers.map((user) => user.id);
+  const rows = await repo.listInvoicesByOrg(orgId, {
+    status: filters.status,
+    search: filters.search,
+    userIds: filters.search ? userSearchIds : undefined,
+  });
   const userIds = [...new Set(rows.map((invoice) => invoice.userId).filter((id): id is string => Boolean(id)))];
   const invoiceIds = rows.map((invoice) => invoice.id);
 
@@ -75,16 +81,7 @@ export async function getInvoicesDataUseCase(
     total_overdue: data.filter((invoice) => invoice.status === "Überfällig").reduce((sum, invoice) => sum + invoice.amountRaw, 0),
   };
 
-  const normalizedSearch = filters.search?.toLowerCase();
-  const filteredData = data.filter((invoice) => {
-    const statusMatches = !filters.status || filters.status === "all" || invoice.status === filters.status;
-    const searchMatches = !normalizedSearch
-      || invoice.number.toLowerCase().includes(normalizedSearch)
-      || invoice.memberName.toLowerCase().includes(normalizedSearch);
-    return statusMatches && searchMatches;
-  });
-
-  return { data: filteredData, summary };
+  return { data, summary };
 }
 
 export async function markInvoicePaidUseCase(env: RouteEnv, input: { orgId: string; actorUserId: string; invoiceId: string }) {

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, like, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { accountingEntries, invoiceItems, invoices, users } from "@/core/db/schema";
 import type { RouteEnv } from "@/core/runtime/route";
@@ -11,8 +11,27 @@ export function financeRepository(env: RouteEnv) {
   const db = getDb(env);
 
   return {
-    async listInvoicesByOrg(orgId: string) {
-      return db.select().from(invoices).where(eq(invoices.orgId, orgId)).orderBy(desc(invoices.createdAt));
+    async listInvoicesByOrg(orgId: string, filters?: { status?: string; search?: string; userIds?: string[] }) {
+      const conditions = [eq(invoices.orgId, orgId)];
+      if (filters?.status && filters.status !== "all") {
+        const reverseStatusMap: Record<string, string> = {
+          Entwurf: "draft",
+          Gesendet: "sent",
+          Bezahlt: "paid",
+          Überfällig: "overdue",
+          Storniert: "cancelled",
+        };
+        conditions.push(eq(invoices.status, reverseStatusMap[filters.status] || filters.status));
+      }
+      if (filters?.search) {
+        const searchConditions = [like(invoices.invoiceNumber, `%${filters.search}%`)];
+        if (filters.userIds && filters.userIds.length > 0) {
+          searchConditions.push(inArray(invoices.userId, filters.userIds));
+        }
+        conditions.push(or(...searchConditions)!);
+      }
+
+      return db.select().from(invoices).where(and(...conditions)).orderBy(desc(invoices.createdAt));
     },
     async findUserName(userId: string) {
       const rows = await db
@@ -27,6 +46,20 @@ export function financeRepository(env: RouteEnv) {
         .select({ id: users.id, firstName: users.firstName, lastName: users.lastName })
         .from(users)
         .where(inArray(users.id, userIds));
+    },
+    async findUsersByOrgAndName(orgId: string, search: string) {
+      const pattern = `%${search}%`;
+      return db
+        .select({ id: users.id, firstName: users.firstName, lastName: users.lastName })
+        .from(users)
+        .where(and(
+          eq(users.orgId, orgId),
+          or(
+            like(users.firstName, pattern),
+            like(users.lastName, pattern),
+            like(users.email, pattern),
+          )!,
+        ));
     },
     async listInvoiceItems(invoiceId: string) {
       return db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, invoiceId)).orderBy(asc(invoiceItems.sortOrder));

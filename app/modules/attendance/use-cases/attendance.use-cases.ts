@@ -1,4 +1,4 @@
-import { and, count, eq, gte, lte } from "drizzle-orm";
+import { and, count, eq, gte, inArray, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { RouteEnv } from "@/core/runtime/route";
 import { attendance, eventOccurrences, eventRegistrations, events, users } from "@/core/db/schema";
@@ -32,20 +32,31 @@ export async function listAttendanceEventsUseCase(
     .innerJoin(events, eq(eventOccurrences.eventId, events.id))
     .where(dateCondition);
 
-  const data = await Promise.all(rows.map(async (row) => {
-    const [registeredRows, checkedInRows] = await Promise.all([
-      db
-        .select({ count: count() })
-        .from(eventRegistrations)
-        .where(and(eq(eventRegistrations.eventId, row.eventId), eq(eventRegistrations.status, "registered"))),
-      db
-        .select({ count: count() })
-        .from(attendance)
-        .where(and(eq(attendance.occurrenceId, row.id), eq(attendance.status, "present"))),
-    ]);
+  const eventIds = [...new Set(rows.map((row) => row.eventId))];
+  const occurrenceIds = rows.map((row) => row.id);
+  const [registeredCounts, checkedInCounts] = await Promise.all([
+    eventIds.length > 0
+      ? db
+          .select({ eventId: eventRegistrations.eventId, count: count() })
+          .from(eventRegistrations)
+          .where(and(inArray(eventRegistrations.eventId, eventIds), eq(eventRegistrations.status, "registered")))
+          .groupBy(eventRegistrations.eventId)
+      : Promise.resolve([]),
+    occurrenceIds.length > 0
+      ? db
+          .select({ occurrenceId: attendance.occurrenceId, count: count() })
+          .from(attendance)
+          .where(and(inArray(attendance.occurrenceId, occurrenceIds), eq(attendance.status, "present")))
+          .groupBy(attendance.occurrenceId)
+      : Promise.resolve([]),
+  ]);
 
-    const totalParticipants = registeredRows[0]?.count || 0;
-    const checkedIn = checkedInRows[0]?.count || 0;
+  const registeredByEventId = new Map(registeredCounts.map((row) => [row.eventId, row.count]));
+  const checkedInByOccurrenceId = new Map(checkedInCounts.map((row) => [row.occurrenceId, row.count]));
+
+  const data = rows.map((row) => {
+    const totalParticipants = registeredByEventId.get(row.eventId) || 0;
+    const checkedIn = checkedInByOccurrenceId.get(row.id) || 0;
 
     return {
       id: row.id,
@@ -57,7 +68,7 @@ export async function listAttendanceEventsUseCase(
       participants: checkedIn,
       maxParticipants: totalParticipants || row.maxParticipants || 0,
     };
-  }));
+  });
 
   return { data };
 }

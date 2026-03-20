@@ -1,7 +1,8 @@
-import { and, count, desc, eq, like } from "drizzle-orm";
+import { and, count, desc, eq, inArray, like } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { RouteEnv } from "@/core/runtime/route";
 import { writeAuditLog } from "@/core/lib/audit";
+import { nextFormattedCounter } from "@/core/db/sequences";
 import { buildMeta, parsePagination } from "@/core/lib/pagination";
 import {
   contractPauses,
@@ -15,36 +16,13 @@ import {
   users,
 } from "@/core/db/schema";
 
-async function nextContractNumber(db: ReturnType<typeof drizzle>, orgId: string) {
-  const rows = await db.select({ count: count() }).from(contracts).where(eq(contracts.orgId, orgId));
-  return `V-${String((rows[0]?.count || 0) + 1).padStart(5, "0")}`;
+async function nextContractNumber(db: D1Database, orgId: string) {
+  return nextFormattedCounter(db, orgId, "contract_number", "V-");
 }
 
-async function nextInvoiceNumber(db: ReturnType<typeof drizzle>, orgId: string) {
+async function nextInvoiceNumber(db: D1Database, orgId: string) {
   const year = new Date().getFullYear();
-  const rows = await db.select({ count: count() }).from(invoices).where(eq(invoices.orgId, orgId));
-  return `RE-${year}-${String((rows[0]?.count || 0) + 1).padStart(5, "0")}`;
-}
-
-async function getTypeName(db: ReturnType<typeof drizzle>, row: typeof contracts.$inferSelect) {
-  if (row.membershipTypeId) {
-    const typeRows = await db
-      .select({ name: membershipTypes.name })
-      .from(membershipTypes)
-      .where(eq(membershipTypes.id, row.membershipTypeId));
-    return typeRows[0]?.name || "";
-  }
-  if (row.tarifId) {
-    const tarifRows = await db.select({ name: tarifs.name }).from(tarifs).where(eq(tarifs.id, row.tarifId));
-    return tarifRows[0]?.name || "";
-  }
-  return "";
-}
-
-async function getGroupName(db: ReturnType<typeof drizzle>, groupId: string | null) {
-  if (!groupId) return "";
-  const rows = await db.select({ name: groups.name }).from(groups).where(eq(groups.id, groupId));
-  return rows[0]?.name || "";
+  return nextFormattedCounter(db, orgId, `invoice_number_${year}`, `RE-${year}-`);
 }
 
 export async function listContractsUseCase(env: RouteEnv, orgId: string, query: Record<string, string | undefined>) {
@@ -68,17 +46,33 @@ export async function listContractsUseCase(env: RouteEnv, orgId: string, query: 
     .limit(perPage)
     .offset(offset);
 
-  const data = await Promise.all(rows.map(async (row) => {
-    const [memberRows, typeName, groupName] = await Promise.all([
-      db
-        .select({ firstName: users.firstName, lastName: users.lastName, email: users.email })
-        .from(users)
-        .where(eq(users.id, row.memberId)),
-      getTypeName(db, row),
-      getGroupName(db, row.groupId),
-    ]);
+  const memberIds = [...new Set(rows.map((row) => row.memberId))];
+  const membershipTypeIds = [...new Set(rows.map((row) => row.membershipTypeId).filter((id): id is string => Boolean(id)))];
+  const tarifIds = [...new Set(rows.map((row) => row.tarifId).filter((id): id is string => Boolean(id)))];
+  const groupIds = [...new Set(rows.map((row) => row.groupId).filter((id): id is string => Boolean(id)))];
 
-    const member = memberRows[0];
+  const [memberRows, typeRows, tarifRows, groupRows] = await Promise.all([
+    memberIds.length > 0
+      ? db.select({ id: users.id, firstName: users.firstName, lastName: users.lastName, email: users.email }).from(users).where(inArray(users.id, memberIds))
+      : Promise.resolve([]),
+    membershipTypeIds.length > 0
+      ? db.select({ id: membershipTypes.id, name: membershipTypes.name }).from(membershipTypes).where(inArray(membershipTypes.id, membershipTypeIds))
+      : Promise.resolve([]),
+    tarifIds.length > 0
+      ? db.select({ id: tarifs.id, name: tarifs.name }).from(tarifs).where(inArray(tarifs.id, tarifIds))
+      : Promise.resolve([]),
+    groupIds.length > 0
+      ? db.select({ id: groups.id, name: groups.name }).from(groups).where(inArray(groups.id, groupIds))
+      : Promise.resolve([]),
+  ]);
+
+  const membersById = new Map(memberRows.map((member) => [member.id, member]));
+  const typeNames = new Map(typeRows.map((type) => [type.id, type.name]));
+  const tarifNames = new Map(tarifRows.map((tarif) => [tarif.id, tarif.name]));
+  const groupNames = new Map(groupRows.map((group) => [group.id, group.name]));
+
+  const data = rows.map((row) => {
+    const member = membersById.get(row.memberId);
     return {
       id: row.id,
       contractNumber: row.contractNumber,
@@ -87,9 +81,13 @@ export async function listContractsUseCase(env: RouteEnv, orgId: string, query: 
       memberEmail: member?.email || "",
       memberInitials: member ? `${member.firstName?.[0] || ""}${member.lastName?.[0] || ""}`.toUpperCase() : "",
       contractKind: row.contractKind,
-      typeName,
+      typeName: row.membershipTypeId
+        ? typeNames.get(row.membershipTypeId) || ""
+        : row.tarifId
+          ? tarifNames.get(row.tarifId) || ""
+          : "",
       groupId: row.groupId,
-      groupName,
+      groupName: row.groupId ? groupNames.get(row.groupId) || "" : "",
       status: row.status,
       startDate: row.startDate,
       endDate: row.endDate,
@@ -100,7 +98,7 @@ export async function listContractsUseCase(env: RouteEnv, orgId: string, query: 
       cancellationEffectiveDate: row.cancellationEffectiveDate,
       createdAt: row.createdAt || "",
     };
-  }));
+  });
 
   return { data, meta: buildMeta(totalRows[0]?.count || 0, page, perPage) };
 }
@@ -126,8 +124,14 @@ export async function getContractDetailUseCase(env: RouteEnv, input: { orgId: st
       .select()
       .from(contracts)
       .where(and(eq(contracts.parentContractId, input.contractId), eq(contracts.orgId, input.orgId))),
-    getTypeName(db, contract),
-    getGroupName(db, contract.groupId),
+    contract.membershipTypeId
+      ? db.select({ name: membershipTypes.name }).from(membershipTypes).where(eq(membershipTypes.id, contract.membershipTypeId))
+      : contract.tarifId
+        ? db.select({ name: tarifs.name }).from(tarifs).where(eq(tarifs.id, contract.tarifId))
+        : Promise.resolve([]),
+    contract.groupId
+      ? db.select({ name: groups.name }).from(groups).where(eq(groups.id, contract.groupId))
+      : Promise.resolve([]),
     contract.createdBy
       ? db
           .select({ firstName: users.firstName, lastName: users.lastName })
@@ -138,8 +142,8 @@ export async function getContractDetailUseCase(env: RouteEnv, input: { orgId: st
 
   return {
     ...contract,
-    typeName,
-    groupName,
+    typeName: typeName[0]?.name || "",
+    groupName: groupName[0]?.name || "",
     createdByName: createdByRows[0] ? `${createdByRows[0].firstName} ${createdByRows[0].lastName}` : "",
     member: memberRows[0]
       ? {
@@ -170,7 +174,7 @@ export async function createContractUseCase(
 ) {
   const db = drizzle(env.DB);
   const contractKind = String(input.payload.contract_kind || "");
-  const contractNumber = await nextContractNumber(db, input.orgId);
+  const contractNumber = await nextContractNumber(env.DB, input.orgId);
 
   let defaults: Record<string, unknown> = {};
   if (contractKind === "MEMBERSHIP" && input.payload.membership_type_id) {
@@ -209,7 +213,7 @@ export async function createContractUseCase(
     membershipTypeId: input.payload.membership_type_id ? String(input.payload.membership_type_id) : null,
     tarifId: input.payload.tarif_id ? String(input.payload.tarif_id) : null,
     parentContractId: input.payload.parent_contract_id ? String(input.payload.parent_contract_id) : null,
-    groupId: input.payload.group_id ? String(input.payload.group_id) : defaults["defaultGroupId"] ? String(defaults["defaultGroupId"]) : null,
+    groupId: input.payload.group_id ? String(input.payload.group_id) : null,
     status: "ACTIVE",
     startDate: String(input.payload.start_date || ""),
     endDate,
@@ -380,7 +384,7 @@ export async function createContractInvoiceUseCase(
   const invoiceRows = await db.insert(invoices).values({
     orgId: input.orgId,
     userId: contract.memberId,
-    invoiceNumber: await nextInvoiceNumber(db, input.orgId),
+    invoiceNumber: await nextInvoiceNumber(env.DB, input.orgId),
     type: "invoice",
     status: "draft",
     subtotal: price,

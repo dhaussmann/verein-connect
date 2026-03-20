@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, inArray, like, lte } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, like, lte, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Event, CalendarEvent } from "@/lib/api";
 import type { RouteEnv } from "@/core/runtime/route";
@@ -9,9 +9,9 @@ import {
   eventLeaders,
   eventOccurrences,
   eventRegistrations,
-  eventTargetRoles,
+  eventTargetGroups,
   events,
-  roles,
+  groups,
   users,
 } from "@/core/db/schema";
 
@@ -53,7 +53,7 @@ async function enrichEvents(db: ReturnType<typeof drizzle>, eventRows: EventRow[
   const eventIds = eventRows.map((event) => event.id);
   const categoryIds = [...new Set(eventRows.map((event) => event.categoryId).filter((id): id is string => Boolean(id)))];
 
-  const [categoryRows, leaderRows, registrationRows, targetRoleRows] = await Promise.all([
+  const [categoryRows, leaderRows, registrationRows, targetGroupRows] = await Promise.all([
     categoryIds.length > 0
       ? db
           .select({ id: eventCategories.id, name: eventCategories.name })
@@ -81,10 +81,10 @@ async function enrichEvents(db: ReturnType<typeof drizzle>, eventRows: EventRow[
       .where(inArray(eventRegistrations.eventId, eventIds))
       .groupBy(eventRegistrations.eventId, eventRegistrations.status),
     db
-      .select({ eventId: eventTargetRoles.eventId, roleId: eventTargetRoles.roleId, roleName: roles.name })
-      .from(eventTargetRoles)
-      .innerJoin(roles, eq(eventTargetRoles.roleId, roles.id))
-      .where(inArray(eventTargetRoles.eventId, eventIds)),
+      .select({ eventId: eventTargetGroups.eventId, groupId: eventTargetGroups.groupId, groupName: groups.name })
+      .from(eventTargetGroups)
+      .innerJoin(groups, eq(eventTargetGroups.groupId, groups.id))
+      .where(inArray(eventTargetGroups.eventId, eventIds)),
   ]);
 
   const categoriesById = new Map(categoryRows.map((row) => [row.id, row.name]));
@@ -104,11 +104,11 @@ async function enrichEvents(db: ReturnType<typeof drizzle>, eventRows: EventRow[
     registrationCountsByEventId.set(row.eventId, counts);
   }
 
-  const targetRolesByEventId = new Map<string, typeof targetRoleRows>();
-  for (const row of targetRoleRows) {
-    const list = targetRolesByEventId.get(row.eventId) || [];
+  const targetGroupsByEventId = new Map<string, typeof targetGroupRows>();
+  for (const row of targetGroupRows) {
+    const list = targetGroupsByEventId.get(row.eventId) || [];
     list.push(row);
-    targetRolesByEventId.set(row.eventId, list);
+    targetGroupsByEventId.set(row.eventId, list);
   }
 
   return eventRows.map((event) => {
@@ -116,7 +116,7 @@ async function enrichEvents(db: ReturnType<typeof drizzle>, eventRows: EventRow[
     const leaders = leadersByEventId.get(event.id) || [];
     const instructor = leaders[0];
     const counts = registrationCountsByEventId.get(event.id) || { registered: 0, waitlist: 0 };
-    const targetRoles = targetRolesByEventId.get(event.id) || [];
+    const targetGroups = targetGroupsByEventId.get(event.id) || [];
     const instructorName = instructor ? `${instructor.firstName} ${instructor.lastName}` : "";
     const instructorInitials = instructor
       ? `${instructor.firstName?.[0] || ""}${instructor.lastName?.[0] || ""}`.toUpperCase()
@@ -147,7 +147,7 @@ async function enrichEvents(db: ReturnType<typeof drizzle>, eventRows: EventRow[
       timeEnd: event.timeEnd || "",
       isPublic: event.isPublic === 1,
       showOnHomepage: event.isPublic === 1,
-      targetRoles: targetRoles.map((row) => row.roleName),
+      targetGroups: targetGroups.map((row) => row.groupName),
       autoInvoice: event.autoInvoice === 1,
       eventType: event.eventType,
       leaders: leaders.map((leader) => ({
@@ -172,8 +172,41 @@ export async function listEventsUseCase(
   const db = drizzle(env.DB);
   const { page, perPage, offset } = parsePagination(query);
   const conditions = [eq(events.orgId, orgId)];
+  let searchableEventIds: string[] | null = null;
 
-  if (query.search) conditions.push(like(events.title, `%${query.search}%`));
+  if (query.search) {
+    const searchPattern = `%${query.search}%`;
+    const leaderMatches = await db
+      .select({ eventId: eventLeaders.eventId })
+      .from(eventLeaders)
+      .innerJoin(users, eq(eventLeaders.userId, users.id))
+      .innerJoin(events, eq(eventLeaders.eventId, events.id))
+      .where(and(
+        eq(events.orgId, orgId),
+        or(
+          like(events.title, searchPattern),
+          like(users.firstName, searchPattern),
+          like(users.lastName, searchPattern),
+        )!,
+      ));
+
+    searchableEventIds = [...new Set(leaderMatches.map((row) => row.eventId))];
+    const titleMatches = await db
+      .select({ id: events.id })
+      .from(events)
+      .where(and(eq(events.orgId, orgId), like(events.title, searchPattern)));
+    searchableEventIds.push(...titleMatches.map((row) => row.id));
+    searchableEventIds = [...new Set(searchableEventIds)];
+
+    if (searchableEventIds.length === 0) {
+      return {
+        data: [],
+        meta: buildMeta(0, page, perPage),
+      };
+    }
+
+    conditions.push(inArray(events.id, searchableEventIds));
+  }
   if (query.event_type) conditions.push(eq(events.eventType, query.event_type));
   if (query.status) {
     const reverseMap: Record<string, string> = {
@@ -186,6 +219,20 @@ export async function listEventsUseCase(
   }
   if (query.start_after) conditions.push(gte(events.startDate, query.start_after));
   if (query.start_before) conditions.push(lte(events.startDate, query.start_before));
+  if (query.category && query.category !== "all") {
+    const categoryRows = await db
+      .select({ id: eventCategories.id })
+      .from(eventCategories)
+      .where(and(eq(eventCategories.orgId, orgId), eq(eventCategories.name, query.category)));
+    const categoryIds = categoryRows.map((row) => row.id);
+    if (categoryIds.length === 0) {
+      return {
+        data: [],
+        meta: buildMeta(0, page, perPage),
+      };
+    }
+    conditions.push(inArray(events.categoryId, categoryIds));
+  }
 
   const whereClause = and(...conditions);
   const totalRows = await db.select({ count: count() }).from(events).where(whereClause);
@@ -198,20 +245,10 @@ export async function listEventsUseCase(
     .offset(offset);
 
   const data = await enrichEvents(db, rows);
-  const normalizedSearch = query.search?.toLowerCase();
-  const filteredData = data.filter((event) => {
-    const searchMatches = !normalizedSearch
-      || event.title.toLowerCase().includes(normalizedSearch)
-      || event.instructorName.toLowerCase().includes(normalizedSearch);
-    const categoryMatches = !query.category || query.category === "all" || event.category === query.category;
-    return searchMatches && categoryMatches;
-  });
-
-  const hasClientSideFilters = Boolean(query.search || (query.category && query.category !== "all"));
 
   return {
-    data: filteredData,
-    meta: buildMeta(hasClientSideFilters ? filteredData.length : (totalRows[0]?.count || 0), page, perPage),
+    data,
+    meta: buildMeta(totalRows[0]?.count || 0, page, perPage),
   };
 }
 
@@ -330,6 +367,7 @@ export async function createEventUseCase(
       autoInvoice?: boolean;
       isPublic?: boolean;
       instructorId?: string;
+      targetGroupIds?: string[];
       weekdays?: string[];
       status?: string;
     };
@@ -370,6 +408,12 @@ export async function createEventUseCase(
       userId: input.payload.instructorId,
       roleLabel: "Trainer",
     });
+  }
+
+  if (input.payload.targetGroupIds?.length) {
+    for (const groupId of [...new Set(input.payload.targetGroupIds)]) {
+      await db.insert(eventTargetGroups).values({ eventId, groupId });
+    }
   }
 
   if (

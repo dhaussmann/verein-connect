@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import type { MembershipType, Group, TarifPricing } from '@/lib/api';
+import type { MembershipType, TarifPricing } from '@/lib/api';
+import { applicationRequirementOptions } from '@/modules/contracts/application-requirements';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import {
-  Button, TextInput, Textarea, Tabs, Switch,
+  Button, TextInput, Textarea, Tabs, Checkbox,
   Radio, Select, Modal,
 } from '@mantine/core';
 import { Trash2, Plus } from 'lucide-react';
@@ -42,7 +43,6 @@ interface PricingRow {
 export interface MembershipTypeFormData {
   name: string;
   is_active: boolean;
-  default_group_id: string;
   short_description: string;
   description: string;
   bank_account_id: string;
@@ -56,8 +56,8 @@ export interface MembershipTypeFormData {
   cancellation_notice_basis: string;
   renewal_duration_months: string;
   renewal_cancellation_days: string;
-  self_registration_enabled: boolean;
   sort_order: string;
+  application_requirements: string[];
   pricing: PricingRow[];
 }
 
@@ -65,7 +65,6 @@ function emptyForm(): MembershipTypeFormData {
   return {
     name: '',
     is_active: true,
-    default_group_id: '',
     short_description: '',
     description: '',
     bank_account_id: '',
@@ -79,8 +78,8 @@ function emptyForm(): MembershipTypeFormData {
     cancellation_notice_basis: 'FROM_CANCELLATION',
     renewal_duration_months: '1',
     renewal_cancellation_days: '1',
-    self_registration_enabled: false,
     sort_order: '0',
+    application_requirements: [],
     pricing: [{ billing_period: 'MONTHLY', price: '' }],
   };
 }
@@ -89,7 +88,6 @@ function fromMembershipType(mt: MembershipType): MembershipTypeFormData {
   return {
     name: mt.name,
     is_active: mt.isActive === 1,
-    default_group_id: mt.defaultGroupId || '',
     short_description: mt.shortDescription || '',
     description: mt.description || '',
     bank_account_id: mt.bankAccountId || '',
@@ -103,8 +101,8 @@ function fromMembershipType(mt: MembershipType): MembershipTypeFormData {
     cancellation_notice_basis: mt.cancellationNoticeBasis || 'FROM_CANCELLATION',
     renewal_duration_months: String(mt.renewalDurationMonths ?? 1),
     renewal_cancellation_days: String(mt.renewalCancellationDays ?? 1),
-    self_registration_enabled: mt.selfRegistrationEnabled === 1,
     sort_order: String(mt.sortOrder ?? 0),
+    application_requirements: mt.applicationRequirements || [],
     pricing: mt.pricing?.length
       ? mt.pricing.map(p => ({ billing_period: p.billingPeriod, price: String(p.price) }))
       : [{ billing_period: 'MONTHLY', price: '' }],
@@ -115,7 +113,6 @@ export function toApiPayload(form: MembershipTypeFormData) {
   return {
     name: form.name,
     is_active: form.is_active,
-    self_registration_enabled: form.self_registration_enabled,
     short_description: form.short_description || undefined,
     description: form.description || undefined,
     bank_account_id: form.bank_account_id || undefined,
@@ -129,7 +126,7 @@ export function toApiPayload(form: MembershipTypeFormData) {
     cancellation_notice_days: parseInt(form.cancellation_notice_days) || 30,
     cancellation_notice_basis: form.cancellation_notice_basis,
     renewal_cancellation_days: parseInt(form.renewal_cancellation_days) || undefined,
-    default_group_id: form.default_group_id || null,
+    application_requirements: form.application_requirements,
     sort_order: parseInt(form.sort_order) || 0,
     pricing: form.pricing
       .filter(p => p.price !== '' && !isNaN(parseFloat(p.price)))
@@ -144,12 +141,11 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editItem: MembershipType | null;
-  groups: Group[];
   onSave: (data: ReturnType<typeof toApiPayload>, isEdit: boolean, id?: string) => Promise<void>;
   saving: boolean;
 }
 
-export default function MembershipTypeDialog({ open, onOpenChange, editItem, groups, onSave, saving }: Props) {
+export default function MembershipTypeDialog({ open, onOpenChange, editItem, onSave, saving }: Props) {
   const isEdit = !!editItem;
 
   return (
@@ -164,7 +160,6 @@ export default function MembershipTypeDialog({ open, onOpenChange, editItem, gro
         <MembershipTypeDialogForm
           key={editItem?.id ?? 'new'}
           editItem={editItem}
-          groups={groups}
           onOpenChange={onOpenChange}
           onSave={onSave}
           saving={saving}
@@ -174,9 +169,9 @@ export default function MembershipTypeDialog({ open, onOpenChange, editItem, gro
   );
 }
 
-type MembershipTypeDialogFormProps = Pick<Props, 'editItem' | 'groups' | 'onOpenChange' | 'onSave' | 'saving'>;
+type MembershipTypeDialogFormProps = Pick<Props, 'editItem' | 'onOpenChange' | 'onSave' | 'saving'>;
 
-function MembershipTypeDialogForm({ editItem, groups, onOpenChange, onSave, saving }: MembershipTypeDialogFormProps) {
+function MembershipTypeDialogForm({ editItem, onOpenChange, onSave, saving }: MembershipTypeDialogFormProps) {
   const [form, setForm] = useState<MembershipTypeFormData>(() => editItem ? fromMembershipType(editItem) : emptyForm());
   const isEdit = !!editItem;
 
@@ -189,6 +184,15 @@ function MembershipTypeDialogForm({ editItem, groups, onOpenChange, onSave, savi
       pricing[index] = { ...pricing[index], [field]: value };
       return { ...prev, pricing };
     });
+  };
+
+  const toggleRequirement = (value: string) => {
+    setForm((prev) => ({
+      ...prev,
+      application_requirements: prev.application_requirements.includes(value)
+        ? prev.application_requirements.filter((item) => item !== value)
+        : [...prev.application_requirements, value],
+    }));
   };
 
   const addPricingRow = () => {
@@ -215,7 +219,7 @@ function MembershipTypeDialogForm({ editItem, groups, onOpenChange, onSave, savi
       <Tabs defaultValue="basisdaten" mt="xs">
         <Tabs.List grow>
           <Tabs.Tab value="basisdaten">BASISDATEN</Tabs.Tab>
-          <Tabs.Tab value="automatisierung">AUTOMATISIERUNG</Tabs.Tab>
+          <Tabs.Tab value="automatisierung">DARSTELLUNG</Tabs.Tab>
         </Tabs.List>
 
         {/* ─── Tab: Basisdaten ─── */}
@@ -243,18 +247,6 @@ function MembershipTypeDialogForm({ editItem, groups, onOpenChange, onSave, savi
               </div>
             </div>
 
-            {/* Standardgruppe */}
-            <Select
-              label={<span className="text-xs uppercase text-muted-foreground">Standardgruppe für Verträge</span>}
-              placeholder="Standardgruppe für Verträge"
-              value={form.default_group_id || '__none__'}
-              onChange={v => set('default_group_id', v === '__none__' ? '' : v ?? '')}
-              data={[
-                { value: '__none__', label: 'Keine' },
-                ...groups.map(g => ({ value: g.id, label: g.name })),
-              ]}
-            />
-
             {/* Kurzbeschreibung */}
             <div>
               <Textarea
@@ -266,6 +258,20 @@ function MembershipTypeDialogForm({ editItem, groups, onOpenChange, onSave, savi
               <p className="text-xs text-muted-foreground mt-1">
                 {form.short_description.length} / 100 — Kurzbeschreibung der Mitgliedsart, z.B. Altersangaben
               </p>
+            </div>
+
+            <div>
+              <p className="text-xs uppercase text-muted-foreground mb-1">Pflichtangaben im Beitrittsantrag</p>
+              <div className="border rounded-md p-3 space-y-2">
+                {applicationRequirementOptions.map((option) => (
+                  <Checkbox
+                    key={option.value}
+                    label={option.label}
+                    checked={form.application_requirements.includes(option.value)}
+                    onChange={() => toggleRequirement(option.value)}
+                  />
+                ))}
+              </div>
             </div>
 
             {/* Beschreibung (Rich-Text) */}
@@ -474,19 +480,6 @@ function MembershipTypeDialogForm({ editItem, groups, onOpenChange, onSave, savi
         {/* ─── Tab: Automatisierung ─── */}
         <Tabs.Panel value="automatisierung" pt="md">
           <div className="space-y-6">
-            <div className="flex items-center justify-between p-4 border rounded-md">
-              <div>
-                <p className="font-medium">Selbstregistrierung aktivieren</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Mitglieder können sich online für diese Mitgliedsart anmelden
-                </p>
-              </div>
-              <Switch
-                checked={form.self_registration_enabled}
-                onChange={e => set('self_registration_enabled', e.currentTarget.checked)}
-              />
-            </div>
-
             <div>
               <TextInput
                 label={<span className="text-xs uppercase text-muted-foreground">Sortierung</span>}
@@ -496,7 +489,7 @@ function MembershipTypeDialogForm({ editItem, groups, onOpenChange, onSave, savi
                 style={{ width: '6rem' }}
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Bestimmt die Reihenfolge in Listen und bei der Selbstregistrierung
+                Bestimmt die Reihenfolge in Listen
               </p>
             </div>
           </div>

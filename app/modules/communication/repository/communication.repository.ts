@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import {
   messageRecipients,
@@ -15,11 +15,33 @@ export function communicationRepository(env: RouteEnv) {
   const db = getDb(env);
 
   return {
-    async listMessagesByOrg(orgId: string) {
-      return db.select().from(messages).where(eq(messages.orgId, orgId)).orderBy(desc(messages.createdAt));
+    async listMessagesByOrg(orgId: string, filters?: { channel?: string; status?: string }) {
+      const conditions = [eq(messages.orgId, orgId)];
+      if (filters?.channel && filters.channel !== "all") {
+        conditions.push(eq(messages.channel, filters.channel));
+      }
+      if (filters?.status && filters.status !== "all") {
+        const reverseStatusMap: Record<string, string> = {
+          Entwurf: "draft",
+          Gesendet: "sent",
+          Geplant: "scheduled",
+          Fehlgeschlagen: "failed",
+        };
+        conditions.push(eq(messages.status, reverseStatusMap[filters.status] || filters.status));
+      }
+
+      return db.select().from(messages).where(and(...conditions)).orderBy(desc(messages.createdAt));
     },
     async listRecipientsForMessage(messageId: string) {
       return db.select().from(messageRecipients).where(eq(messageRecipients.messageId, messageId));
+    },
+    async countRecipientsForMessages(messageIds: string[]) {
+      if (messageIds.length === 0) return [];
+      return db
+        .select({ messageId: messageRecipients.messageId, count: count() })
+        .from(messageRecipients)
+        .where(inArray(messageRecipients.messageId, messageIds))
+        .groupBy(messageRecipients.messageId);
     },
     async insertMessage(values: typeof messages.$inferInsert) {
       await db.insert(messages).values(values);

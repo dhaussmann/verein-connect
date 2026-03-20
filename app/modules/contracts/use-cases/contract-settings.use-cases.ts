@@ -1,4 +1,4 @@
-import { and, asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { RouteEnv } from "@/core/runtime/route";
 import { writeAuditLog } from "@/core/lib/audit";
@@ -23,10 +23,14 @@ function parseJsonArray<T>(value: string | null | undefined): T[] {
   }
 }
 
-async function getGroupName(db: ReturnType<typeof drizzle>, groupId: string | null | undefined) {
-  if (!groupId) return "";
-  const rows = await db.select({ name: groups.name }).from(groups).where(eq(groups.id, groupId));
-  return rows[0]?.name || "";
+function mapPricingByParentId(rows: Array<typeof tarifPricing.$inferSelect>) {
+  const result = new Map<string, typeof tarifPricing.$inferSelect[]>();
+  for (const row of rows) {
+    const list = result.get(row.parentId) || [];
+    list.push(row);
+    result.set(row.parentId, list);
+  }
+  return result;
 }
 
 export async function getContractSettingsUseCase(env: RouteEnv, orgId: string) {
@@ -77,14 +81,17 @@ export async function saveContractSettingsUseCase(
 export async function listMembershipTypesUseCase(env: RouteEnv, orgId: string) {
   const db = drizzle(env.DB);
   const rows = await db.select().from(membershipTypes).where(eq(membershipTypes.orgId, orgId)).orderBy(asc(membershipTypes.sortOrder));
-  const data = await Promise.all(rows.map(async (item) => ({
+  const pricingRows = rows.length > 0
+    ? await db.select().from(tarifPricing).where(and(inArray(tarifPricing.parentId, rows.map((item) => item.id)), eq(tarifPricing.parentType, "MEMBERSHIP_TYPE")))
+    : [];
+  
+  const pricingByParentId = mapPricingByParentId(pricingRows);
+
+  const data = rows.map((item) => ({
     ...item,
-    pricing: await db
-      .select()
-      .from(tarifPricing)
-      .where(and(eq(tarifPricing.parentId, item.id), eq(tarifPricing.parentType, "MEMBERSHIP_TYPE"))),
-    groupName: await getGroupName(db, item.defaultGroupId),
-  })));
+    applicationRequirements: parseJsonArray<string>(item.applicationRequirements),
+    pricing: pricingByParentId.get(item.id) || [],
+  }));
 
   return { data };
 }
@@ -109,7 +116,7 @@ export async function saveMembershipTypeUseCase(env: RouteEnv, input: { orgId: s
     cancellationNoticeDays: Number(input.payload.cancellation_notice_days ?? 30),
     cancellationNoticeBasis: String(input.payload.cancellation_notice_basis || "FROM_CANCELLATION"),
     renewalCancellationDays: input.payload.renewal_cancellation_days ? Number(input.payload.renewal_cancellation_days) : null,
-    defaultGroupId: input.payload.default_group_id ? String(input.payload.default_group_id) : null,
+    applicationRequirements: JSON.stringify(Array.isArray(input.payload.application_requirements) ? input.payload.application_requirements : []),
     sortOrder: Number(input.payload.sort_order ?? 0),
     updatedAt: new Date().toISOString(),
   };
@@ -158,15 +165,18 @@ export async function deleteMembershipTypeUseCase(env: RouteEnv, input: { orgId:
 export async function listTarifsUseCase(env: RouteEnv, orgId: string) {
   const db = drizzle(env.DB);
   const rows = await db.select().from(tarifs).where(eq(tarifs.orgId, orgId)).orderBy(asc(tarifs.sortOrder));
-  const data = await Promise.all(rows.map(async (item) => ({
+  const pricingRows = rows.length > 0
+    ? await db.select().from(tarifPricing).where(and(inArray(tarifPricing.parentId, rows.map((item) => item.id)), eq(tarifPricing.parentType, "TARIF")))
+    : [];
+  
+  const pricingByParentId = mapPricingByParentId(pricingRows);
+
+  const data = rows.map((item) => ({
     ...item,
+    applicationRequirements: parseJsonArray<string>(item.applicationRequirements),
     allowedMembershipTypeIds: parseJsonArray<string>(item.allowedMembershipTypeIds),
-    pricing: await db
-      .select()
-      .from(tarifPricing)
-      .where(and(eq(tarifPricing.parentId, item.id), eq(tarifPricing.parentType, "TARIF"))),
-    groupName: await getGroupName(db, item.defaultGroupId),
-  })));
+    pricing: pricingByParentId.get(item.id) || [],
+  }));
 
   return { data };
 }
@@ -191,7 +201,7 @@ export async function saveTarifUseCase(env: RouteEnv, input: { orgId: string; ac
     cancellationNoticeDays: Number(input.payload.cancellation_notice_days ?? 30),
     cancellationNoticeBasis: String(input.payload.cancellation_notice_basis || "FROM_CANCELLATION"),
     renewalCancellationDays: input.payload.renewal_cancellation_days ? Number(input.payload.renewal_cancellation_days) : null,
-    defaultGroupId: input.payload.default_group_id ? String(input.payload.default_group_id) : null,
+    applicationRequirements: JSON.stringify(Array.isArray(input.payload.application_requirements) ? input.payload.application_requirements : []),
     allowedMembershipTypeIds: JSON.stringify(Array.isArray(input.payload.allowed_membership_type_ids) ? input.payload.allowed_membership_type_ids : []),
     sortOrder: Number(input.payload.sort_order ?? 0),
     updatedAt: new Date().toISOString(),
@@ -242,11 +252,16 @@ export async function deleteTarifUseCase(env: RouteEnv, input: { orgId: string; 
 export async function listDiscountGroupsUseCase(env: RouteEnv, orgId: string) {
   const db = drizzle(env.DB);
   const rows = await db.select().from(discountGroups).where(eq(discountGroups.orgId, orgId)).orderBy(asc(discountGroups.name));
-  const data = await Promise.all(rows.map(async (item) => ({
+  const groupIds = [...new Set(rows.map((item) => item.groupId).filter((id): id is string => Boolean(id)))];
+  const groupRows = groupIds.length > 0
+    ? await db.select({ id: groups.id, name: groups.name }).from(groups).where(inArray(groups.id, groupIds))
+    : [];
+  const groupNamesById = new Map(groupRows.map((row) => [row.id, row.name]));
+  const data = rows.map((item) => ({
     ...item,
     rules: parseJsonArray<{ field: string; operator: string; value: string }>(item.rules),
-    groupName: await getGroupName(db, item.groupId),
-  })));
+    groupName: item.groupId ? groupNamesById.get(item.groupId) || "" : "",
+  }));
   return { data };
 }
 

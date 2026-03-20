@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, like, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import {
   auditLog,
@@ -28,7 +28,17 @@ export function settingsRepository(env: RouteEnv) {
       await db.update(organizations).set(values).where(eq(organizations.id, orgId));
     },
 
-    async listUsersByOrg(orgId: string) {
+    async listUsersByOrg(orgId: string, search?: string) {
+      const conditions = [eq(users.orgId, orgId)];
+      if (search) {
+        const pattern = `%${search}%`;
+        conditions.push(or(
+          like(users.firstName, pattern),
+          like(users.lastName, pattern),
+          like(users.email, pattern),
+        )!);
+      }
+
       return db
         .select({
           id: users.id,
@@ -38,7 +48,7 @@ export function settingsRepository(env: RouteEnv) {
           status: users.status,
         })
         .from(users)
-        .where(eq(users.orgId, orgId))
+        .where(and(...conditions))
         .orderBy(asc(users.lastName), asc(users.firstName));
     },
 
@@ -104,6 +114,18 @@ export function settingsRepository(env: RouteEnv) {
         .from(userRoles)
         .where(and(eq(userRoles.roleId, roleId), eq(userRoles.status, "active")));
       return rows[0]?.count || 0;
+    },
+
+    async countActiveMembersForRoles(roleIds: string[]) {
+      if (roleIds.length === 0) return [];
+      return db
+        .select({
+          roleId: userRoles.roleId,
+          count: count(),
+        })
+        .from(userRoles)
+        .where(and(inArray(userRoles.roleId, roleIds), eq(userRoles.status, "active")))
+        .groupBy(userRoles.roleId);
     },
 
     async updateRole(orgId: string, roleId: string, values: Partial<typeof roles.$inferInsert>) {
@@ -182,6 +204,14 @@ export function settingsRepository(env: RouteEnv) {
         .from(users)
         .where(eq(users.id, userId));
       return rows[0] || null;
+    },
+
+    async findUserNamesByIds(userIds: string[]) {
+      if (userIds.length === 0) return [];
+      return db
+        .select({ id: users.id, firstName: users.firstName, lastName: users.lastName })
+        .from(users)
+        .where(inArray(users.id, userIds));
     },
   };
 }

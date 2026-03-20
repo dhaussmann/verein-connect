@@ -18,23 +18,20 @@ export async function getMessagesDataUseCase(
   filters: { channel?: string; status?: string } = {},
 ) {
   const repo = communicationRepository(env);
-  const rows = await repo.listMessagesByOrg(orgId);
-  const messages = await Promise.all(rows.map(async (message) => {
-    const recipients = await repo.listRecipientsForMessage(message.id);
+  const rows = await repo.listMessagesByOrg(orgId, filters);
+  const recipientCounts = await repo.countRecipientsForMessages(rows.map((message) => message.id));
+  const recipientCountsByMessageId = new Map(recipientCounts.map((row) => [row.messageId, row.count]));
+
+  return rows.map((message) => {
+    const recipientCount = recipientCountsByMessageId.get(message.id) || 0;
     return {
       id: message.id,
       subject: message.subject || "",
       channel: message.channel,
-      recipients: recipients.length === 0 ? "–" : `${recipients.length} Empfänger`,
+      recipients: recipientCount === 0 ? "–" : `${recipientCount} Empfänger`,
       sentDate: message.sentAt || message.createdAt || "",
       status: mapMessageStatus(message.status),
     };
-  }));
-
-  return messages.filter((message) => {
-    const channelMatches = !filters.channel || filters.channel === "all" || message.channel === filters.channel;
-    const statusMatches = !filters.status || filters.status === "all" || message.status === filters.status;
-    return channelMatches && statusMatches;
   });
 }
 
@@ -44,24 +41,29 @@ export async function createMessageUseCase(
 ) {
   const repo = communicationRepository(env);
   const messageId = crypto.randomUUID();
-  await repo.insertMessage({
-    id: messageId,
-    orgId: input.orgId,
-    senderId: input.actorUserId,
-    channel: input.channel,
-    subject: input.subject || null,
-    body: input.body,
-    status: input.status,
-    scheduledAt: input.scheduledAt || null,
-    sentAt: input.status === "sent" ? new Date().toISOString() : null,
-  });
-  await repo.insertMessageRecipient({
-    messageId,
-    recipientType: "all",
-    recipientId: null,
-    deliveryStatus: input.status === "sent" ? "delivered" : "pending",
-    deliveredAt: input.status === "sent" ? new Date().toISOString() : null,
-  });
+  const deliveredAt = input.status === "sent" ? new Date().toISOString() : null;
+  await env.DB.batch([
+    env.DB.prepare(`
+      INSERT INTO messages (
+        id, org_id, sender_id, channel, subject, body, status, scheduled_at, sent_at
+      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+    `).bind(
+      messageId,
+      input.orgId,
+      input.actorUserId,
+      input.channel,
+      input.subject || null,
+      input.body,
+      input.status,
+      input.scheduledAt || null,
+      deliveredAt,
+    ),
+    env.DB.prepare(`
+      INSERT INTO message_recipients (
+        id, message_id, recipient_type, recipient_id, delivery_status, delivered_at
+      ) VALUES (?1, ?2, 'all', NULL, ?3, ?4)
+    `).bind(crypto.randomUUID(), messageId, input.status === "sent" ? "delivered" : "pending", deliveredAt),
+  ]);
   await writeAuditLog(env.DB, input.orgId, input.actorUserId, input.status === "sent" ? "Nachricht gesendet" : "Nachricht erstellt", "message", messageId, input.subject || input.recipientLabel || "");
   return messageId;
 }
@@ -72,35 +74,51 @@ export async function duplicateMessageUseCase(env: RouteEnv, input: { orgId: str
   if (!original) throw new Error("Nachricht nicht gefunden");
 
   const copyId = crypto.randomUUID();
-  await repo.insertMessage({
-    id: copyId,
-    orgId: input.orgId,
-    senderId: input.actorUserId,
-    channel: original.channel,
-    subject: original.subject ? `${original.subject} (Kopie)` : "Kopie",
-    body: original.body,
-    status: "draft",
-  });
-  await repo.insertMessageRecipient({
-    messageId: copyId,
-    recipientType: "all",
-    recipientId: null,
-  });
+  await env.DB.batch([
+    env.DB.prepare(`
+      INSERT INTO messages (
+        id, org_id, sender_id, channel, subject, body, status
+      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'draft')
+    `).bind(
+      copyId,
+      input.orgId,
+      input.actorUserId,
+      original.channel,
+      original.subject ? `${original.subject} (Kopie)` : "Kopie",
+      original.body,
+    ),
+    env.DB.prepare(`
+      INSERT INTO message_recipients (
+        id, message_id, recipient_type, recipient_id, delivery_status
+      ) VALUES (?1, ?2, 'all', NULL, 'pending')
+    `).bind(crypto.randomUUID(), copyId),
+  ]);
   await writeAuditLog(env.DB, input.orgId, input.actorUserId, "Nachricht dupliziert", "message", copyId, original.subject || "");
   return copyId;
 }
 
 export async function sendMessageUseCase(env: RouteEnv, input: { orgId: string; actorUserId: string; messageId: string }) {
-  const repo = communicationRepository(env);
-  await repo.updateMessage(input.orgId, input.messageId, { status: "sent", sentAt: new Date().toISOString() });
-  await repo.updateRecipientsForMessage(input.messageId, { deliveryStatus: "delivered", deliveredAt: new Date().toISOString() });
+  const deliveredAt = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare(`
+      UPDATE messages
+      SET status = 'sent', sent_at = ?1
+      WHERE id = ?2 AND org_id = ?3
+    `).bind(deliveredAt, input.messageId, input.orgId),
+    env.DB.prepare(`
+      UPDATE message_recipients
+      SET delivery_status = 'delivered', delivered_at = ?1
+      WHERE message_id = ?2
+    `).bind(deliveredAt, input.messageId),
+  ]);
   await writeAuditLog(env.DB, input.orgId, input.actorUserId, "Nachricht gesendet", "message", input.messageId);
 }
 
 export async function deleteMessageUseCase(env: RouteEnv, input: { orgId: string; actorUserId: string; messageId: string }) {
-  const repo = communicationRepository(env);
-  await repo.deleteRecipientsForMessage(input.messageId);
-  await repo.deleteMessage(input.orgId, input.messageId);
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM message_recipients WHERE message_id = ?1`).bind(input.messageId),
+    env.DB.prepare(`DELETE FROM messages WHERE id = ?1 AND org_id = ?2`).bind(input.messageId, input.orgId),
+  ]);
   await writeAuditLog(env.DB, input.orgId, input.actorUserId, "Nachricht gelöscht", "message", input.messageId);
 }
 

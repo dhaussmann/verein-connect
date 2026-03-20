@@ -1,9 +1,7 @@
 export type OrganizationSettingsData = {
   id: string;
   name: string;
-  slug: string;
   logoUrl: string | null;
-  plan: string | null;
   settings: Record<string, unknown>;
 };
 
@@ -21,6 +19,9 @@ export type SettingsRole = {
   id: string;
   name: string;
   category: string;
+  roleType: string;
+  scope: string;
+  isAssignable: boolean;
   memberCount: number;
   isSystem: boolean;
   description: string;

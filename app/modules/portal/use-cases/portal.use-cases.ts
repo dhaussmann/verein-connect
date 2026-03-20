@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import bcrypt from "bcryptjs";
 import type { RouteEnv } from "@/core/runtime/route";
@@ -68,7 +68,7 @@ export async function getPortalProfileUseCase(env: RouteEnv, userId: string) {
       description: role.description || "",
     })),
     customFields,
-    joinDate: user.createdAt ? new Date(user.createdAt).toLocaleDateString("de-DE") : "",
+    joinDate: (user.joinDate || user.createdAt) ? new Date((user.joinDate || user.createdAt) as string).toLocaleDateString("de-DE") : "",
   };
 }
 
@@ -144,12 +144,17 @@ export async function getPortalEventsUseCase(env: RouteEnv, userId: string) {
     .where(and(eq(eventRegistrations.userId, userId), eq(eventRegistrations.status, "registered")))
     .orderBy(desc(events.startDate));
 
-  return Promise.all(registrations.map(async (registration) => {
-    const participantRows = await db
-      .select({ count: count() })
-      .from(eventRegistrations)
-      .where(and(eq(eventRegistrations.eventId, registration.eventId), eq(eventRegistrations.status, "registered")));
+  const eventIds = [...new Set(registrations.map((registration) => registration.eventId))];
+  const participantRows = eventIds.length > 0
+    ? await db
+        .select({ eventId: eventRegistrations.eventId, count: count() })
+        .from(eventRegistrations)
+        .where(and(inArray(eventRegistrations.eventId, eventIds), eq(eventRegistrations.status, "registered")))
+        .groupBy(eventRegistrations.eventId)
+    : [];
+  const participantsByEventId = new Map(participantRows.map((row) => [row.eventId, row.count]));
 
+  return registrations.map((registration) => {
     const statusMap: Record<string, string> = {
       draft: "Entwurf",
       published: "Aktiv",
@@ -170,11 +175,11 @@ export async function getPortalEventsUseCase(env: RouteEnv, userId: string) {
       eventType: registration.eventType || "single",
       status: statusMap[registration.status || "active"] || registration.status,
       maxParticipants: registration.maxParticipants,
-      participants: participantRows[0]?.count || 0,
+      participants: participantsByEventId.get(registration.eventId) || 0,
       registeredAt: registration.registeredAt,
       registrationStatus: registration.regStatus,
     };
-  }));
+  });
 }
 
 export async function getPortalAttendanceUseCase(env: RouteEnv, userId: string) {

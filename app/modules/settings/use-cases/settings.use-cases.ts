@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { writeAuditLog } from "@/core/lib/audit";
+import { nextMemberNumber } from "@/core/db/sequences";
 import type { RouteEnv } from "@/core/runtime/route";
 import { settingsRepository } from "../repository/settings.repository";
 import type {
@@ -21,7 +22,7 @@ function mapUserStatus(status: string | null) {
 }
 
 function mapRoleCategory(category: string | null) {
-  return category === "system" ? "System" : category === "team" ? "Sport" : "Verein";
+  return category === "system" ? "System" : "Verein";
 }
 
 function parseRolePermissions(raw: string | null) {
@@ -41,23 +42,19 @@ export async function getOrganizationSettingsUseCase(env: RouteEnv, orgId: strin
   return {
     id: org.id,
     name: org.name,
-    slug: org.slug,
     logoUrl: org.logoUrl ?? null,
-    plan: org.plan ?? null,
     settings: JSON.parse(org.settings || "{}"),
   };
 }
 
 export async function updateOrganizationSettingsUseCase(
   env: RouteEnv,
-  input: { orgId: string; actorUserId: string; name: string; timezone: string; language: string; website?: string },
+  input: { orgId: string; actorUserId: string; name: string; website?: string },
 ) {
   const repo = settingsRepository(env);
   const existing = await getOrganizationSettingsUseCase(env, input.orgId);
   const mergedSettings = {
     ...(existing?.settings || {}),
-    timezone: input.timezone,
-    language: input.language,
     website: input.website || "",
   };
 
@@ -70,10 +67,10 @@ export async function updateOrganizationSettingsUseCase(
   await writeAuditLog(env.DB, input.orgId, input.actorUserId, "Organisation bearbeitet", "organization", input.orgId);
 }
 
-export async function getSettingsUsersUseCase(env: RouteEnv, orgId: string): Promise<SettingsUser[]> {
+export async function getSettingsUsersUseCase(env: RouteEnv, orgId: string, search?: string): Promise<SettingsUser[]> {
   const repo = settingsRepository(env);
   const [users, roleRows] = await Promise.all([
-    repo.listUsersByOrg(orgId),
+    repo.listUsersByOrg(orgId, search),
     repo.listActiveUserRolesByOrg(orgId),
   ]);
 
@@ -101,9 +98,8 @@ export async function createSettingsUserUseCase(
   const existing = await repo.findUserByEmail(input.orgId, input.email);
   if (existing) throw new Error("Ein Mitglied mit dieser E-Mail-Adresse existiert bereits");
 
-  const total = await repo.countUsersByOrg(input.orgId);
-  const memberNumber = `M-${new Date().getFullYear()}-${String(total + 1).padStart(3, "0")}`;
   const userId = crypto.randomUUID();
+  const memberNumber = await nextMemberNumber(env.DB, input.orgId);
   const passwordHash = await bcrypt.hash(input.password, 12);
 
   await repo.insertUser({
@@ -148,23 +144,37 @@ export async function toggleOrgAdminRoleUseCase(
 export async function getSettingsRolesUseCase(env: RouteEnv, orgId: string): Promise<SettingsRole[]> {
   const repo = settingsRepository(env);
   const roles = await repo.listRolesByOrg(orgId);
+  const counts = await repo.countActiveMembersForRoles(roles.map((role) => role.id));
+  const countsByRoleId = new Map(counts.map((entry) => [entry.roleId, entry.count]));
 
-  return Promise.all(
-    roles.map(async (role) => ({
-      id: role.id,
-      name: role.name,
-      category: mapRoleCategory(role.category),
-      memberCount: await repo.countActiveMembersForRole(role.id),
-      isSystem: role.isSystem === 1,
-      description: role.description || "",
-      permissions: parseRolePermissions(role.permissions),
-    })),
-  );
+  return roles.map((role) => ({
+    id: role.id,
+    name: role.name,
+    category: mapRoleCategory(role.category),
+    roleType: role.roleType || "staff",
+    scope: role.scope || "club",
+    isAssignable: role.isAssignable === 1,
+    memberCount: countsByRoleId.get(role.id) || 0,
+    isSystem: role.isSystem === 1,
+    description: role.description || "",
+    permissions: parseRolePermissions(role.permissions),
+  }));
 }
 
 export async function createOrUpdateRoleUseCase(
   env: RouteEnv,
-  input: { orgId: string; actorUserId: string; roleId?: string; name: string; description?: string; category: "general" | "team" | "department" | "system"; permissions: string[] },
+  input: {
+    orgId: string;
+    actorUserId: string;
+    roleId?: string;
+    name: string;
+    description?: string;
+    category: "general" | "system";
+    roleType: string;
+    scope: string;
+    isAssignable: boolean;
+    permissions: string[];
+  },
 ) {
   const repo = settingsRepository(env);
   if (input.roleId) {
@@ -172,6 +182,9 @@ export async function createOrUpdateRoleUseCase(
       name: input.name,
       description: input.description || null,
       category: input.category,
+      roleType: input.roleType,
+      scope: input.scope,
+      isAssignable: input.isAssignable ? 1 : 0,
       permissions: JSON.stringify(input.permissions),
     });
     await writeAuditLog(env.DB, input.orgId, input.actorUserId, "Rolle bearbeitet", "role", input.roleId, input.name);
@@ -185,6 +198,9 @@ export async function createOrUpdateRoleUseCase(
     name: input.name,
     description: input.description || null,
     category: input.category,
+    roleType: input.roleType,
+    scope: input.scope,
+    isAssignable: input.isAssignable ? 1 : 0,
     permissions: JSON.stringify(input.permissions),
   });
   await writeAuditLog(env.DB, input.orgId, input.actorUserId, "Rolle erstellt", "role", roleId, input.name);
@@ -265,23 +281,19 @@ export async function deleteProfileFieldUseCase(env: RouteEnv, input: { orgId: s
 export async function getSettingsAuditLogUseCase(env: RouteEnv, orgId: string, limit = 50): Promise<SettingsAuditEntry[]> {
   const repo = settingsRepository(env);
   const rows = await repo.listAuditEntriesByOrg(orgId, limit);
+  const users = await repo.findUserNamesByIds(
+    [...new Set(rows.map((entry) => entry.userId).filter((userId): userId is string => Boolean(userId)))],
+  );
+  const usersById = new Map(users.map((user) => [user.id, `${user.firstName} ${user.lastName}`]));
 
-  return Promise.all(rows.map(async (entry) => {
-    let userName = "System";
-    if (entry.userId) {
-      const user = await repo.findUserNameById(entry.userId);
-      if (user) userName = `${user.firstName} ${user.lastName}`;
-    }
-
-    return {
-      id: entry.id,
-      user: userName,
-      userId: entry.userId,
-      action: entry.action,
-      entityType: entry.entityType,
-      entityId: entry.entityId,
-      details: entry.details,
-      timestamp: entry.createdAt || "",
-    };
+  return rows.map((entry) => ({
+    id: entry.id,
+    user: entry.userId ? usersById.get(entry.userId) || "System" : "System",
+    userId: entry.userId,
+    action: entry.action,
+    entityType: entry.entityType,
+    entityId: entry.entityId,
+    details: entry.details,
+    timestamp: entry.createdAt || "",
   }));
 }
