@@ -14,13 +14,13 @@ Vollständiger Prompt für die Backend-Implementierung
 
 # **Hinweise zur Verwendung**
 
-Dieses Dokument enthält den vollständigen Prompt für eine neue Claude Opus 4.6 Instanz, die das Backend für die Vereinsverwaltung-SaaS-Plattform implementiert. Der Prompt ist in **Phasen** aufgeteilt:
+Dieses Dokument enthält den vollständigen Prompt für eine neue Clude Opus 4.6 Instanz, die das Backend für die Vereinsverwaltung-SaaS-Plattform implementiert. Der Prompt ist in **Phasen** aufgeteilt:
 
 | Phase | Inhalt | Prio |
 | :---- | :---- | :---- |
 | Phase 1 | Projekt-Setup: Monorepo, Hono.js Worker, Drizzle ORM, D1-Schema, wrangler.toml | MUSS |
 | Phase 2 | Auth-System: Register, Login, JWT (Ed25519), Refresh-Token, Middleware | MUSS |
-| Phase 3 | CRUD-APIs: Mitglieder, Rollen, dynamische Profilfelder, Familien | MUSS |
+| Phase 3 | CRUD-APIs: Mitglieder, Rollen, dynamische Profilfelder, Familien  | MUSS |
 | Phase 4 | Events & Kurse: CRUD, Anmeldung, Warteliste, Anwesenheit | MUSS |
 | Phase 5 | Kommunikation: Nachrichten, E-Mail-Versand, Chat (Durable Objects) | SOLL |
 | Phase 6 | Finanzen: Rechnungen, PDF-Generierung, Stripe, Buchhaltung | SOLL |
