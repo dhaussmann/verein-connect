@@ -3,10 +3,12 @@ import { drizzle } from "drizzle-orm/d1";
 import {
   groupMembers,
   groups,
+  membershipLevels,
   profileFieldDefinitions,
   profileFieldValues,
   roles,
   userRoles,
+  userMembershipLevels,
   users,
 } from "@/core/db/schema";
 import type { RouteEnv } from "@/core/runtime/route";
@@ -101,6 +103,14 @@ export function membersRepository(env: RouteEnv) {
       return db.select().from(roles).where(eq(roles.orgId, orgId)).orderBy(asc(roles.name));
     },
 
+    async findActiveUserRole(userId: string, roleId: string) {
+      const rows = await db
+        .select({ id: userRoles.id })
+        .from(userRoles)
+        .where(and(eq(userRoles.userId, userId), eq(userRoles.roleId, roleId), eq(userRoles.status, "active")));
+      return rows[0] || null;
+    },
+
     async countActiveMembersForRole(roleId: string) {
       const rows = await db
         .select({ count: count() })
@@ -156,6 +166,20 @@ export function membersRepository(env: RouteEnv) {
 
     async assignGroup(userId: string, groupId: string) {
       await db.insert(groupMembers).values({ userId, groupId, role: "Mitglied" });
+    },
+
+    async listMembershipLevelsByOrg(orgId: string) {
+      return db.select().from(membershipLevels).where(eq(membershipLevels.orgId, orgId)).orderBy(asc(membershipLevels.sortOrder), asc(membershipLevels.name));
+    },
+
+    async listMembershipLevelsForUser(userId: string) {
+      return db
+        .select({
+          levelId: userMembershipLevels.levelId,
+          assignedAt: userMembershipLevels.assignedAt,
+        })
+        .from(userMembershipLevels)
+        .where(eq(userMembershipLevels.userId, userId));
     },
 
     async findProfileFieldByName(orgId: string, fieldName: string) {

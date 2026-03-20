@@ -1,5 +1,4 @@
-/* eslint-disable react-refresh/only-export-components */
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { Link, useFetcher, useLoaderData, useActionData, redirect } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import {
@@ -9,7 +8,6 @@ import {
   Badge, Button, ActionIcon, Card, Group, Stack, Text, Tabs, Modal, TextInput, Textarea,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import type { ContractDetail } from '@/modules/contracts/types/contracts.types';
 import { requireRouteData } from '@/core/runtime/route';
 import {
   cancelContractUseCase,
@@ -52,7 +50,7 @@ type ContractDetailActionData = {
   error?: string;
 };
 
-type TypedContractDetail = Omit<ContractDetail, 'children' | 'invoices'> & {
+type TypedContractDetail = NonNullable<Awaited<ReturnType<typeof getContractDetailUseCase>>> & {
   children: ContractChildSummary[];
   invoices: ContractInvoice[];
 };
@@ -118,9 +116,7 @@ export default function ContractDetailRoute() {
   const [pauseUntil, setPauseUntil] = useState('');
   const [pauseReason, setPauseReason] = useState('');
 
-  useEffect(() => {
-    const payload = fetcher.data || actionData;
-    if (!payload) return;
+  const handleResult = useEffectEvent((payload: NonNullable<typeof fetcher.data | typeof actionData>) => {
     if (payload.success) {
       notifications.show({ color: 'green', message: payload.intent === 'create-invoice' ? 'Rechnung erstellt' : payload.intent === 'pause' ? 'Pause eingetragen' : 'Vertrag gekündigt' });
       setCancelOpen(false);
@@ -128,9 +124,18 @@ export default function ContractDetailRoute() {
       setPauseFrom('');
       setPauseUntil('');
       setPauseReason('');
-    } else if (payload.error) {
+      return;
+    }
+
+    if (payload.error) {
       notifications.show({ color: 'red', message: payload.error });
     }
+  });
+
+  useEffect(() => {
+    const payload = fetcher.data || actionData;
+    if (!payload) return;
+    handleResult(payload);
   }, [fetcher.data, actionData]);
 
   const c = contract as TypedContractDetail | null;

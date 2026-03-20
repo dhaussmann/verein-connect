@@ -1,5 +1,4 @@
-/* eslint-disable react-refresh/only-export-components */
-import { useEffect, useRef, useState, type ComponentPropsWithoutRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Form, Link, useFetcher, useLoaderData, useSearchParams } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { Button, Card, Badge, TextInput, Select, Checkbox, Table, Modal, Group, Text, Menu } from "@mantine/core";
@@ -142,11 +141,8 @@ export default function MembersListRoute() {
         <div className="p-4">
           <div className="flex flex-wrap gap-2 mb-4">
             <div className="relative flex-1 min-w-[200px]">
-              <TextInput
+              <MemberSearchInput
                 key={filters.search}
-                placeholder="Name, E-Mail oder Mitgliedsnummer suchen..."
-                leftSection={<Search className="h-4 w-4" />}
-                component={MemberSearchInput}
                 initialValue={filters.search}
                 onSearchChange={(value: string) => updateParams({ search: value || null })}
               />
@@ -356,7 +352,7 @@ type MemberSearchInputProps = {
   onSearchChange: (value: string) => void;
 };
 
-function MemberSearchInput({ initialValue, onSearchChange, ...props }: MemberSearchInputProps & ComponentPropsWithoutRef<"input">) {
+function MemberSearchInput({ initialValue, onSearchChange }: MemberSearchInputProps) {
   const [value, setValue] = useState(initialValue);
   const timeoutRef = useRef<number | null>(null);
 
@@ -367,8 +363,9 @@ function MemberSearchInput({ initialValue, onSearchChange, ...props }: MemberSea
   }, []);
 
   return (
-    <input
-      {...props}
+    <TextInput
+      placeholder="Name, E-Mail oder Mitgliedsnummer suchen..."
+      leftSection={<Search className="h-4 w-4" />}
       value={value}
       onChange={(event) => {
         const nextValue = event.target.value;

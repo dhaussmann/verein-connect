@@ -100,6 +100,15 @@ export type MemberDetailLoaderData = {
   contracts: Contract[];
   groups: MemberGroupOption[];
   roles: Role[];
+  membershipLevels?: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    color: string | null;
+    sortOrder: number | null;
+    isDefault: number | null;
+    assignedAt?: string | null;
+  }>;
   profileFields: MemberProfileFieldOption[];
   bankAccount: BankAccount | null;
 };

@@ -1,5 +1,4 @@
-/* eslint-disable react-refresh/only-export-components */
-import { useEffect, useRef, useState, type ComponentPropsWithoutRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useFetcher, useLoaderData, useActionData, useSearchParams } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import { FileText, Plus, Search, MoreHorizontal, Eye, XCircle, Receipt } from 'lucide-react';
@@ -151,14 +150,9 @@ export default function ContractsIndexRoute() {
       </div>
 
       <Group gap="sm">
-        <TextInput
-          key={searchParams.get('search') || ''}
-          placeholder="Vertragsnummer suchen..."
-          component={ContractsSearchInput}
+        <ContractsSearchInput
           initialValue={searchParams.get('search') || ''}
           onSearchChange={(value: string) => updateSearchParams({ search: value || null })}
-          leftSection={<Search size={16} />}
-          style={{ flex: 1 }}
         />
         <Select
           value={statusFilter || null}
@@ -326,7 +320,7 @@ type ContractsSearchInputProps = {
   onSearchChange: (value: string) => void;
 };
 
-function ContractsSearchInput({ initialValue, onSearchChange, ...props }: ContractsSearchInputProps & ComponentPropsWithoutRef<'input'>) {
+function ContractsSearchInput({ initialValue, onSearchChange }: ContractsSearchInputProps) {
   const [value, setValue] = useState(initialValue);
   const timeoutRef = useRef<number | null>(null);
 
@@ -337,8 +331,10 @@ function ContractsSearchInput({ initialValue, onSearchChange, ...props }: Contra
   }, []);
 
   return (
-    <input
-      {...props}
+    <TextInput
+      placeholder="Vertragsnummer suchen..."
+      leftSection={<Search size={16} />}
+      style={{ flex: 1 }}
       value={value}
       onChange={(event) => {
         const nextValue = event.target.value;

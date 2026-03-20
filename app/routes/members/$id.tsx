@@ -1,5 +1,4 @@
-/* eslint-disable react-refresh/only-export-components */
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { Link, redirect, useFetcher, useLoaderData } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -18,9 +17,11 @@ import { addGroupMemberUseCase } from '@/modules/groups/use-cases/add-group-memb
 import { removeGroupMemberUseCase } from '@/modules/groups/use-cases/remove-group-member.use-case';
 import { upsertBankAccountUseCase, deleteBankAccountUseCase } from '@/modules/members/use-cases/bank-account.use-case';
 import { getMemberDetailUseCase } from '@/modules/members/use-cases/get-member-detail.use-case';
+import { assignMemberRoleUseCase } from '@/modules/members/use-cases/role-assignment.use-case';
 import { updateMemberUseCase } from '@/modules/members/use-cases/update-member.use-case';
 import { changeMemberStatusUseCase } from '@/modules/members/use-cases/change-member-status.use-case';
 import { listGuardiansUseCase, createGuardianUseCase, updateGuardianUseCase, deleteGuardianUseCase } from '@/modules/members/use-cases/guardian.use-case';
+import { assignMembershipLevelUseCase, getUserMembershipLevelsUseCase, listMembershipLevelsUseCase, removeMembershipLevelUseCase } from '@/modules/members/use-cases/membership-levels.use-case';
 import type { MemberProfileFieldOption } from '@/modules/members/types/member.types';
 
 const statusColor = (s: string) =>
@@ -30,11 +31,18 @@ export async function loader({ request, context, params }: LoaderFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
   const memberId = params.id;
   if (!memberId) throw new Error("Mitglied fehlt");
-  const [detail, guardians] = await Promise.all([
+  const [detail, guardians, membershipLevels, assignedMembershipLevels] = await Promise.all([
     getMemberDetailUseCase(env, { orgId: user.orgId, memberId }),
     listGuardiansUseCase(env, { orgId: user.orgId, userId: memberId }),
+    listMembershipLevelsUseCase(env, user.orgId),
+    getUserMembershipLevelsUseCase(env, memberId),
   ]);
-  return { ...detail, guardians };
+  const assignedByLevelId = new Map(assignedMembershipLevels.map((row) => [row.levelId, row.assignedAt]));
+  const memberMembershipLevels = membershipLevels
+    .filter((level) => assignedByLevelId.has(level.id))
+    .map((level) => ({ ...level, assignedAt: assignedByLevelId.get(level.id) || null }));
+
+  return { ...detail, guardians, membershipLevels, memberMembershipLevels };
 }
 
 export async function action({ request, context, params }: ActionFunctionArgs) {
@@ -70,10 +78,28 @@ export async function action({ request, context, params }: ActionFunctionArgs) {
       await addGroupMemberUseCase(env, { orgId: user.orgId, actorUserId: user.id, groupId, userId: memberId });
       return { success: true, intent };
     }
+    if (intent === "assign-role") {
+      const roleId = String(formData.get("roleId") || "");
+      if (!roleId) return { success: false, intent, error: "Rolle fehlt" };
+      await assignMemberRoleUseCase(env, { orgId: user.orgId, actorUserId: user.id, userId: memberId, roleId });
+      return { success: true, intent };
+    }
     if (intent === "remove-group-member") {
       const groupId = String(formData.get("groupId") || "");
       if (!groupId) return { success: false, intent, error: "Gruppe fehlt" };
       await removeGroupMemberUseCase(env, { orgId: user.orgId, actorUserId: user.id, groupId, userId: memberId });
+      return { success: true, intent };
+    }
+    if (intent === "assign-membership-level") {
+      const levelId = String(formData.get("levelId") || "");
+      if (!levelId) return { success: false, intent, error: "Mitgliedsstufe fehlt" };
+      await assignMembershipLevelUseCase(env, { userId: memberId, levelId });
+      return { success: true, intent };
+    }
+    if (intent === "remove-membership-level") {
+      const levelId = String(formData.get("levelId") || "");
+      if (!levelId) return { success: false, intent, error: "Mitgliedsstufe fehlt" };
+      await removeMembershipLevelUseCase(env, { userId: memberId, levelId });
       return { success: true, intent };
     }
     if (intent === "upsert-bank-account") {
@@ -165,14 +191,16 @@ export async function action({ request, context, params }: ActionFunctionArgs) {
 }
 
 export default function MemberDetail() {
-  const { member, contracts, groups, roles, profileFields: profileFieldDefinitions, bankAccount, guardians } = useLoaderData<typeof loader>();
+  const { member, contracts, groups, roles, membershipLevels, memberMembershipLevels, profileFields: profileFieldDefinitions, bankAccount, guardians } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<Record<string, string>>({});
   const [roleModalOpen, setRoleModalOpen] = useState(false);
-  const [newRole, setNewRole] = useState('');
+  const [selectedRoleId, setSelectedRoleId] = useState('');
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState('');
+  const [membershipLevelModalOpen, setMembershipLevelModalOpen] = useState(false);
+  const [selectedMembershipLevelId, setSelectedMembershipLevelId] = useState('');
   const [bankEditing, setBankEditing] = useState(false);
   const [bankForm, setBankForm] = useState({ accountHolder: '', iban: '', bic: '', bankName: '', sepaMandate: false, sepaMandateDate: '', sepaMandateRef: '' });
   const [guardianModalOpen, setGuardianModalOpen] = useState(false);
@@ -181,40 +209,56 @@ export default function MemberDetail() {
   const allRoles = roles;
   const customFieldDefs: MemberProfileFieldOption[] = profileFieldDefinitions;
 
-  useEffect(() => {
-    if (!fetcher.data) return;
-    if (fetcher.data.error) {
-      notifications.show({ color: 'red', message: fetcher.data.error });
+  const handleFetcherResult = useEffectEvent((data: NonNullable<typeof fetcher.data>) => {
+    if (data.error) {
+      notifications.show({ color: 'red', message: data.error });
       return;
     }
-    if (!fetcher.data.success) return;
+    if (!data.success) return;
 
-    if (fetcher.data.intent === 'deactivate-member') {
+    if (data.intent === 'deactivate-member') {
       notifications.show({ color: 'green', message: 'Mitglied deaktiviert' });
-    } else if (fetcher.data.intent === 'remove-group-member') {
+    } else if (data.intent === 'remove-group-member') {
       notifications.show({ color: 'green', message: 'Gruppe entfernt' });
-    } else if (fetcher.data.intent === 'add-group-member') {
+    } else if (data.intent === 'add-group-member') {
       notifications.show({ color: 'green', message: 'Gruppe zugewiesen' });
       setGroupModalOpen(false);
       setSelectedGroupId('');
-    } else if (fetcher.data.intent === 'delete-bank-account') {
+    } else if (data.intent === 'assign-role') {
+      notifications.show({ color: 'green', message: 'Rolle zugewiesen' });
+      setRoleModalOpen(false);
+      setSelectedRoleId('');
+    } else if (data.intent === 'assign-membership-level') {
+      notifications.show({ color: 'green', message: 'Mitgliedsstufe zugewiesen' });
+      setMembershipLevelModalOpen(false);
+      setSelectedMembershipLevelId('');
+    } else if (data.intent === 'remove-membership-level') {
+      notifications.show({ color: 'green', message: 'Mitgliedsstufe entfernt' });
+    } else if (data.intent === 'delete-bank-account') {
       notifications.show({ color: 'green', message: 'Kontoverbindung gelöscht' });
       setBankEditing(false);
-    } else if (fetcher.data.intent === 'upsert-bank-account') {
+    } else if (data.intent === 'upsert-bank-account') {
       notifications.show({ color: 'green', message: 'Kontoverbindung gespeichert' });
       setBankEditing(false);
-    } else if (fetcher.data.intent === 'update-member') {
+    } else if (data.intent === 'update-member') {
       notifications.show({ color: 'green', message: 'Mitglied gespeichert' });
       setEditing(false);
-    } else if (fetcher.data.intent === 'create-guardian' || fetcher.data.intent === 'update-guardian') {
+    } else if (data.intent === 'create-guardian' || data.intent === 'update-guardian') {
       notifications.show({ color: 'green', message: 'Erziehungsberechtigter gespeichert' });
       setGuardianModalOpen(false);
-    } else if (fetcher.data.intent === 'delete-guardian') {
+    } else if (data.intent === 'delete-guardian') {
       notifications.show({ color: 'green', message: 'Erziehungsberechtigter gelöscht' });
     }
+  });
+
+  useEffect(() => {
+    if (!fetcher.data) return;
+    handleFetcherResult(fetcher.data);
   }, [fetcher.data]);
 
   const roleAssignments = member.roles.map((r: string) => ({ role: r, startDate: member.joinDate }));
+  const availableRoles = allRoles.filter((role) => !member.roles.includes(role.name));
+  const availableMembershipLevels = membershipLevels.filter((level) => !memberMembershipLevels.some((assigned) => assigned.id === level.id));
 
   const profileFieldRows = [
     { label: 'Vorname', value: member.firstName },
@@ -401,6 +445,42 @@ export default function MemberDetail() {
                   ))}
                 </Table.Tbody>
               </Table>
+
+              <div className="mt-6">
+                <Group justify="space-between" mb="xs">
+                  <Text size="sm" fw={600}>Mitgliedsstufen</Text>
+                  <Button size="xs" variant="outline" onClick={() => setMembershipLevelModalOpen(true)}>
+                    Mitgliedsstufe zuweisen
+                  </Button>
+                </Group>
+                {memberMembershipLevels.length === 0 ? (
+                  <Text size="sm" c="dimmed">Keine Mitgliedsstufen zugewiesen.</Text>
+                ) : (
+                  <Group gap="xs" mb="lg">
+                    {memberMembershipLevels.map((level) => (
+                      <Badge
+                        key={level.id}
+                        color={level.color ?? 'blue'}
+                        variant="light"
+                        rightSection={
+                          <button
+                            className="ml-1 rounded-full hover:bg-black/20 p-0.5"
+                            onClick={() => {
+                              if (confirm(`Mitgliedsstufe '${level.name}' entfernen?`)) {
+                                fetcher.submit({ intent: 'remove-membership-level', levelId: level.id }, { method: 'post' });
+                              }
+                            }}
+                          >
+                            <X size={10} />
+                          </button>
+                        }
+                      >
+                        {level.name}
+                      </Badge>
+                    ))}
+                  </Group>
+                )}
+              </div>
 
               <div className="mt-6">
                 <Group justify="space-between" mb="xs">
@@ -792,16 +872,46 @@ export default function MemberDetail() {
         <Stack gap="md">
           <Select
             label="Rolle"
-            value={newRole}
-            onChange={(val) => setNewRole(val ?? '')}
+            value={selectedRoleId}
+            onChange={(val) => setSelectedRoleId(val ?? '')}
             placeholder="Rolle wählen"
-            data={allRoles.map((r) => ({ value: r.name, label: r.name }))}
+            data={availableRoles.map((role) => ({ value: role.id, label: role.name }))}
           />
           <TextInput label="Startdatum" type="text" placeholder="TT.MM.JJJJ" defaultValue="17.03.2026" />
         </Stack>
         <Group justify="flex-end" mt="md">
           <Button variant="outline" onClick={() => setRoleModalOpen(false)}>Abbrechen</Button>
-          <Button onClick={() => setRoleModalOpen(false)}>Zuweisen</Button>
+          <Button
+            disabled={!selectedRoleId || fetcher.state !== 'idle'}
+            onClick={() => {
+              fetcher.submit({ intent: 'assign-role', roleId: selectedRoleId }, { method: 'post' });
+            }}
+          >
+            {fetcher.state !== 'idle' ? 'Wird zugewiesen...' : 'Zuweisen'}
+          </Button>
+        </Group>
+      </Modal>
+
+      <Modal opened={membershipLevelModalOpen} onClose={() => setMembershipLevelModalOpen(false)} title="Mitgliedsstufe zuweisen" size="sm">
+        <Stack gap="md">
+          <Select
+            label="Mitgliedsstufe"
+            value={selectedMembershipLevelId}
+            onChange={(val) => setSelectedMembershipLevelId(val ?? '')}
+            placeholder="Mitgliedsstufe wählen"
+            data={availableMembershipLevels.map((level) => ({ value: level.id, label: level.name }))}
+          />
+        </Stack>
+        <Group justify="flex-end" mt="md">
+          <Button variant="outline" onClick={() => setMembershipLevelModalOpen(false)}>Abbrechen</Button>
+          <Button
+            disabled={!selectedMembershipLevelId || fetcher.state !== 'idle'}
+            onClick={() => {
+              fetcher.submit({ intent: 'assign-membership-level', levelId: selectedMembershipLevelId }, { method: 'post' });
+            }}
+          >
+            {fetcher.state !== 'idle' ? 'Wird zugewiesen...' : 'Zuweisen'}
+          </Button>
         </Group>
       </Modal>
     </div>
