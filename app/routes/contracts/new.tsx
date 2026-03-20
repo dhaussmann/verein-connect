@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, redirect, useLoaderData, useActionData, useNavigation } from 'react-router';
+import { Form, Link, redirect, useLoaderData, useActionData, useNavigation } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import { ArrowLeft } from 'lucide-react';
 import {
@@ -41,18 +41,8 @@ type ContractFormState = {
   notes: string;
 };
 
-type ContractCreatePayload = {
-  member_id: string;
-  contract_kind: 'MEMBERSHIP' | 'TARIF';
-  start_date: string;
-  end_date?: string;
-  billing_period: string;
-  current_price: number;
-  auto_renew: boolean;
-  notes?: string;
-  membership_type_id?: string;
-  tarif_id?: string;
-  group_id?: string;
+export const handle = {
+  breadcrumb: "Neuer Vertrag",
 };
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
@@ -73,7 +63,19 @@ export async function action({ request, context }: ActionFunctionArgs) {
     await createContractUseCase(env, {
       orgId: user.orgId,
       actorUserId: user.id,
-      payload: JSON.parse(String(formData.get('payload') || '{}')),
+      payload: {
+        member_id: String(formData.get('member_id') || ''),
+        contract_kind: String(formData.get('contract_kind') || 'MEMBERSHIP'),
+        start_date: String(formData.get('start_date') || ''),
+        end_date: String(formData.get('end_date') || ''),
+        billing_period: String(formData.get('billing_period') || ''),
+        current_price: Number(formData.get('current_price') || 0),
+        auto_renew: formData.get('auto_renew') === 'on',
+        notes: String(formData.get('notes') || ''),
+        membership_type_id: String(formData.get('membership_type_id') || ''),
+        tarif_id: String(formData.get('tarif_id') || ''),
+        group_id: String(formData.get('group_id') || ''),
+      },
     });
     return redirect('/contracts');
   } catch (error) {
@@ -176,31 +178,22 @@ export default function ContractNewRoute() {
         </div>
       </Group>
 
-      <form method="post" onSubmit={(e) => {
-        if (!form.member_id) {
-          e.preventDefault();
-          notifications.show({ color: 'red', message: 'Bitte wählen Sie ein Mitglied' });
-          return;
-        }
-        const payloadInput = e.currentTarget.querySelector<HTMLInputElement>('input[name="payload"]');
-        if (!payloadInput) return;
-        const payload: ContractCreatePayload = {
-          member_id: form.member_id,
-          contract_kind: form.contract_kind,
-          start_date: form.start_date,
-          billing_period: form.billing_period,
-          current_price: parseFloat(form.current_price) || 0,
-          auto_renew: form.auto_renew,
-          notes: form.notes || undefined,
-        };
-        if (form.contract_kind === 'MEMBERSHIP' && form.membership_type_id) payload.membership_type_id = form.membership_type_id;
-        if (form.contract_kind === 'TARIF' && form.tarif_id) payload.tarif_id = form.tarif_id;
-        if (form.group_id) payload.group_id = form.group_id;
-        if (form.end_date) payload.end_date = form.end_date;
-        payloadInput.value = JSON.stringify(payload);
-      }}>
-        <input type="hidden" name="payload" value="" />
+      <Form
+        method="post"
+        onSubmit={(event) => {
+          if (!form.member_id) {
+            event.preventDefault();
+            notifications.show({ color: 'red', message: 'Bitte wählen Sie ein Mitglied' });
+          }
+        }}
+      >
         <Stack gap="lg">
+          <input type="hidden" name="member_id" value={form.member_id} />
+          <input type="hidden" name="contract_kind" value={form.contract_kind} />
+          <input type="hidden" name="membership_type_id" value={form.membership_type_id} />
+          <input type="hidden" name="tarif_id" value={form.tarif_id} />
+          <input type="hidden" name="group_id" value={form.group_id} />
+          <input type="hidden" name="billing_period" value={form.billing_period} />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Mitglied & Vertragsart */}
             <Card>
@@ -264,6 +257,7 @@ export default function ContractNewRoute() {
               <Text fw={600} mb="md">Laufzeit &amp; Abrechnung</Text>
               <Stack gap="sm">
                 <TextInput
+                  name="start_date"
                   label="Startdatum *"
                   type="date"
                   value={form.start_date}
@@ -271,6 +265,7 @@ export default function ContractNewRoute() {
                 />
 
                 <TextInput
+                  name="end_date"
                   label="Enddatum (optional)"
                   type="date"
                   value={form.end_date}
@@ -305,6 +300,7 @@ export default function ContractNewRoute() {
                 )}
 
                 <TextInput
+                  name="current_price"
                   label="Preis (€)"
                   type="number"
                   step="0.01"
@@ -315,12 +311,14 @@ export default function ContractNewRoute() {
                 />
 
                 <Switch
+                  name="auto_renew"
                   label="Auto-Verlängerung"
                   checked={form.auto_renew}
                   onChange={(e) => set('auto_renew', e.currentTarget.checked)}
                 />
 
                 <Textarea
+                  name="notes"
                   label="Notizen (optional)"
                   value={form.notes}
                   onChange={(e) => set('notes', e.target.value)}
@@ -337,7 +335,7 @@ export default function ContractNewRoute() {
             </Button>
           </Group>
         </Stack>
-      </form>
+      </Form>
     </Stack>
   );
 }

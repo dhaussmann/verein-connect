@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, redirect, useActionData, useLoaderData, useNavigation } from 'react-router';
+import { Form, Link, redirect, useActionData, useLoaderData, useNavigation } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -24,6 +24,10 @@ import { createEventUseCase } from '@/modules/events/use-cases/events.use-cases'
 
 const weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
+export const handle = {
+  breadcrumb: "Neuer Kurs",
+};
+
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
   const memberResult = await listMembersUseCase(env, user.orgId, { perPage: 200, page: 1 });
@@ -34,11 +38,37 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
 export async function action({ request, context }: ActionFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
   const formData = await request.formData();
+
+  const eventTypeLabel = String(formData.get("eventType") || "Einmalig");
+  const eventType =
+    eventTypeLabel === "Einmalig"
+      ? "single"
+      : eventTypeLabel === "Wiederkehrend"
+        ? "recurring"
+        : "course";
+  const weekdays = formData.getAll("weekdays").map(String).filter(Boolean);
+
   try {
     await createEventUseCase(env, {
       orgId: user.orgId,
       actorUserId: user.id,
-      payload: JSON.parse(String(formData.get("payload") || "{}")),
+      payload: {
+        title: String(formData.get("title") || ""),
+        description: String(formData.get("description") || ""),
+        eventType,
+        location: String(formData.get("location") || ""),
+        startDate: String(formData.get("startDate") || ""),
+        endDate: String(formData.get("endDate") || ""),
+        timeStart: String(formData.get("timeStart") || ""),
+        timeEnd: String(formData.get("timeEnd") || ""),
+        maxParticipants: Number(formData.get("maxParticipants") || 0),
+        price: formData.get("costEnabled") ? Number(formData.get("price") || 0) : null,
+        autoInvoice: formData.get("autoInvoice") === "on",
+        isPublic: formData.get("isPublic") === "on",
+        instructorId: String(formData.get("instructorId") || "") || undefined,
+        weekdays,
+        status: "Entwurf",
+      },
     });
     return redirect('/courses');
   } catch (error) {
@@ -79,32 +109,14 @@ export default function CourseNewRoute() {
       </Button>
       <PageHeader title="Neuer Kurs / Termin" />
 
-      <form method="post" onSubmit={(e) => {
-        const form = e.currentTarget;
-        const payloadInput = form.querySelector<HTMLInputElement>('input[name="payload"]');
-        if (!payloadInput) return;
-        const fd = new FormData(form);
-        const payload = {
-          title: fd.get('title') as string,
-          description: fd.get('description') as string || '',
-          eventType: eventType === 'Einmalig' ? 'single' : eventType === 'Wiederkehrend' ? 'recurring' : 'course',
-          location: fd.get('location') as string || '',
-          startDate: startDate?.toISOString().slice(0, 10) || '',
-          endDate: endDate?.toISOString().slice(0, 10) || '',
-          timeStart: fd.get('timeStart') as string || '',
-          timeEnd: fd.get('timeEnd') as string || '',
-          maxParticipants: Number(fd.get('maxParticipants')) || 0,
-          price: costEnabled ? Number(fd.get('price')) || null : null,
-          autoInvoice,
-          isPublic,
-          showOnHomepage: showHomepage,
-          weekdays: selectedDays,
-          status: 'Entwurf',
-          instructorId: fd.get('instructorId') as string || undefined,
-        };
-        payloadInput.value = JSON.stringify(payload);
-      }}>
-        <input type="hidden" name="payload" value="" />
+      <Form method="post">
+        <input type="hidden" name="eventType" value={eventType} />
+        <input type="hidden" name="startDate" value={startDate ? format(startDate, 'yyyy-MM-dd') : ''} />
+        <input type="hidden" name="endDate" value={endDate ? format(endDate, 'yyyy-MM-dd') : ''} />
+        {selectedDays.map((day) => (
+          <input key={day} type="hidden" name="weekdays" value={day} />
+        ))}
+        {costEnabled && <input type="hidden" name="costEnabled" value="on" />}
         <Stack gap="lg" maw={768}>
           <Card withBorder>
             <Text fw={600} mb="xs">Grunddaten</Text>
@@ -112,6 +124,7 @@ export default function CourseNewRoute() {
               <SimpleGrid cols={{ base: 1, md: 2 }}>
                 <TextInput name="title" label="Titel *" placeholder="z.B. Judo-Anfänger" required />
                 <Select
+                  name="category"
                   label="Kategorie"
                   defaultValue="Training"
                   data={[
@@ -219,7 +232,7 @@ export default function CourseNewRoute() {
                   <TextInput name="price" type="number" step="0.01" label="Betrag (€)" placeholder="25,00" min={0} />
                   <Group justify="space-between">
                     <Text size="sm">Automatische Rechnung</Text>
-                    <Switch checked={autoInvoice} onChange={(e) => setAutoInvoice(e.currentTarget.checked)} />
+                    <Switch name="autoInvoice" checked={autoInvoice} onChange={(e) => setAutoInvoice(e.currentTarget.checked)} />
                   </Group>
                 </>
               )}
@@ -231,7 +244,7 @@ export default function CourseNewRoute() {
             <Stack gap="sm">
               <Group justify="space-between">
                 <Text size="sm">Öffentlich</Text>
-                <Switch checked={isPublic} onChange={(e) => setIsPublic(e.currentTarget.checked)} />
+                <Switch name="isPublic" checked={isPublic} onChange={(e) => setIsPublic(e.currentTarget.checked)} />
               </Group>
               <Group justify="space-between">
                 <Text size="sm">Auf Homepage anzeigen</Text>
@@ -249,7 +262,7 @@ export default function CourseNewRoute() {
             </Button>
           </Group>
         </Stack>
-      </form>
+      </Form>
     </div>
   );
 }
