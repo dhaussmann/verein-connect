@@ -101,8 +101,8 @@ export default function Files() {
     if (!uploadFile) return;
     const fd = new FormData();
     fd.append('file', uploadFile);
-    if (uploadCategoryId) fd.append('category_id', uploadCategoryId);
-    if (uploadGroupId) fd.append('group_id', uploadGroupId);
+    if (uploadCategoryId && uploadCategoryId !== 'none') fd.append('category_id', uploadCategoryId);
+    if (uploadGroupId && uploadGroupId !== 'none') fd.append('group_id', uploadGroupId);
     fd.append('visibility', uploadVisibility);
     if (uploadDescription) fd.append('description', uploadDescription);
     try {
@@ -405,7 +405,7 @@ export default function Files() {
               <Select value={uploadCategoryId} onValueChange={setUploadCategoryId}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Keine Kategorie" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Keine Kategorie</SelectItem>
+                  <SelectItem value="none">Keine Kategorie</SelectItem>
                   {categories.map(c => (
                     <SelectItem key={c.id} value={c.id}>
                       <div className="flex items-center gap-2">
@@ -421,7 +421,7 @@ export default function Files() {
               <Select value={uploadGroupId} onValueChange={setUploadGroupId}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Keine Gruppe" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Keine Gruppe</SelectItem>
+                  <SelectItem value="none">Keine Gruppe</SelectItem>
                   {allGroups.map((g: any) => (
                     <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
                   ))}
