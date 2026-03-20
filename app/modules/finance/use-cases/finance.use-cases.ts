@@ -14,7 +14,11 @@ function mapInvoiceStatus(status: string | null) {
   return statusMap[status || "draft"] || status || "Entwurf";
 }
 
-export async function getInvoicesDataUseCase(env: RouteEnv, orgId: string) {
+export async function getInvoicesDataUseCase(
+  env: RouteEnv,
+  orgId: string,
+  filters: { search?: string; status?: string } = {},
+) {
   const repo = financeRepository(env);
   const rows = await repo.listInvoicesByOrg(orgId);
   const userIds = [...new Set(rows.map((invoice) => invoice.userId).filter((id): id is string => Boolean(id)))];
@@ -71,7 +75,16 @@ export async function getInvoicesDataUseCase(env: RouteEnv, orgId: string) {
     total_overdue: data.filter((invoice) => invoice.status === "Überfällig").reduce((sum, invoice) => sum + invoice.amountRaw, 0),
   };
 
-  return { data, summary };
+  const normalizedSearch = filters.search?.toLowerCase();
+  const filteredData = data.filter((invoice) => {
+    const statusMatches = !filters.status || filters.status === "all" || invoice.status === filters.status;
+    const searchMatches = !normalizedSearch
+      || invoice.number.toLowerCase().includes(normalizedSearch)
+      || invoice.memberName.toLowerCase().includes(normalizedSearch);
+    return statusMatches && searchMatches;
+  });
+
+  return { data: filteredData, summary };
 }
 
 export async function markInvoicePaidUseCase(env: RouteEnv, input: { orgId: string; actorUserId: string; invoiceId: string }) {

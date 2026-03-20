@@ -1,10 +1,22 @@
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, gte, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { RouteEnv } from "@/core/runtime/route";
 import { attendance, eventOccurrences, eventRegistrations, events, users } from "@/core/db/schema";
 
-export async function listTodayAttendanceEventsUseCase(env: RouteEnv, orgId: string, today: string) {
+export async function listAttendanceEventsUseCase(
+  env: RouteEnv,
+  orgId: string,
+  input: { startDate: string; endDate?: string },
+) {
   const db = drizzle(env.DB);
+  const dateCondition = input.endDate
+    ? and(
+        eq(events.orgId, orgId),
+        gte(eventOccurrences.startDate, input.startDate),
+        lte(eventOccurrences.startDate, input.endDate),
+      )
+    : and(eq(events.orgId, orgId), eq(eventOccurrences.startDate, input.startDate));
+
   const rows = await db
     .select({
       id: eventOccurrences.id,
@@ -18,7 +30,7 @@ export async function listTodayAttendanceEventsUseCase(env: RouteEnv, orgId: str
     })
     .from(eventOccurrences)
     .innerJoin(events, eq(eventOccurrences.eventId, events.id))
-    .where(and(eq(events.orgId, orgId), eq(eventOccurrences.startDate, today)));
+    .where(dateCondition);
 
   const data = await Promise.all(rows.map(async (row) => {
     const [registeredRows, checkedInRows] = await Promise.all([

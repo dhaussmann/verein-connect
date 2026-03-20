@@ -12,10 +12,14 @@ function mapMessageStatus(status: string | null) {
   return statusMap[status || "draft"] || status || "Entwurf";
 }
 
-export async function getMessagesDataUseCase(env: RouteEnv, orgId: string) {
+export async function getMessagesDataUseCase(
+  env: RouteEnv,
+  orgId: string,
+  filters: { channel?: string; status?: string } = {},
+) {
   const repo = communicationRepository(env);
   const rows = await repo.listMessagesByOrg(orgId);
-  return Promise.all(rows.map(async (message) => {
+  const messages = await Promise.all(rows.map(async (message) => {
     const recipients = await repo.listRecipientsForMessage(message.id);
     return {
       id: message.id,
@@ -26,6 +30,12 @@ export async function getMessagesDataUseCase(env: RouteEnv, orgId: string) {
       status: mapMessageStatus(message.status),
     };
   }));
+
+  return messages.filter((message) => {
+    const channelMatches = !filters.channel || filters.channel === "all" || message.channel === filters.channel;
+    const statusMatches = !filters.status || filters.status === "all" || message.status === filters.status;
+    return channelMatches && statusMatches;
+  });
 }
 
 export async function createMessageUseCase(

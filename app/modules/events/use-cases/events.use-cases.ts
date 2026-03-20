@@ -198,7 +198,21 @@ export async function listEventsUseCase(
     .offset(offset);
 
   const data = await enrichEvents(db, rows);
-  return { data, meta: buildMeta(totalRows[0]?.count || 0, page, perPage) };
+  const normalizedSearch = query.search?.toLowerCase();
+  const filteredData = data.filter((event) => {
+    const searchMatches = !normalizedSearch
+      || event.title.toLowerCase().includes(normalizedSearch)
+      || event.instructorName.toLowerCase().includes(normalizedSearch);
+    const categoryMatches = !query.category || query.category === "all" || event.category === query.category;
+    return searchMatches && categoryMatches;
+  });
+
+  const hasClientSideFilters = Boolean(query.search || (query.category && query.category !== "all"));
+
+  return {
+    data: filteredData,
+    meta: buildMeta(hasClientSideFilters ? filteredData.length : (totalRows[0]?.count || 0), page, perPage),
+  };
 }
 
 export async function listCalendarEventsUseCase(
