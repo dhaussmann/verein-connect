@@ -1,19 +1,28 @@
-INSERT INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) VALUES
-('ml-007', '2dd25a4a-17e8-4527-8fa8-d804e52ee2ff', 'Mitglied', 'Regulaeres Vereinsmitglied', '#3b82f6', 0, 1),
-('ml-008', '2dd25a4a-17e8-4527-8fa8-d804e52ee2ff', 'Passives Mitglied', 'Passives Mitglied ohne aktive Teilnahme', '#6b7280', 1, 0),
-('ml-009', '2dd25a4a-17e8-4527-8fa8-d804e52ee2ff', 'Trainer', 'Trainer und Uebungsleiter', '#f59e0b', 2, 0),
-('ml-010', '2dd25a4a-17e8-4527-8fa8-d804e52ee2ff', 'Supporter', 'Foerdermitglied', '#10b981', 3, 0),
-('ml-011', '2dd25a4a-17e8-4527-8fa8-d804e52ee2ff', 'Verwaltung', 'Verwaltungsmitarbeiter', '#8b5cf6', 4, 0),
-('ml-012', '2dd25a4a-17e8-4527-8fa8-d804e52ee2ff', 'Vorstand', 'Vorstandsmitglied', '#ef4444', 5, 0),
-('ml-013', '4f72e881-f0d3-4cc7-bf81-720b9e09658f', 'Mitglied', 'Regulaeres Vereinsmitglied', '#3b82f6', 0, 1),
-('ml-014', '4f72e881-f0d3-4cc7-bf81-720b9e09658f', 'Passives Mitglied', 'Passives Mitglied ohne aktive Teilnahme', '#6b7280', 1, 0),
-('ml-015', '4f72e881-f0d3-4cc7-bf81-720b9e09658f', 'Trainer', 'Trainer und Uebungsleiter', '#f59e0b', 2, 0),
-('ml-016', '4f72e881-f0d3-4cc7-bf81-720b9e09658f', 'Supporter', 'Foerdermitglied', '#10b981', 3, 0),
-('ml-017', '4f72e881-f0d3-4cc7-bf81-720b9e09658f', 'Verwaltung', 'Verwaltungsmitarbeiter', '#8b5cf6', 4, 0),
-('ml-018', '4f72e881-f0d3-4cc7-bf81-720b9e09658f', 'Vorstand', 'Vorstandsmitglied', '#ef4444', 5, 0),
-('ml-019', 'ebbef720-dbcf-4d4e-bd8c-0e02b5afc3cd', 'Mitglied', 'Regulaeres Vereinsmitglied', '#3b82f6', 0, 1),
-('ml-020', 'ebbef720-dbcf-4d4e-bd8c-0e02b5afc3cd', 'Passives Mitglied', 'Passives Mitglied ohne aktive Teilnahme', '#6b7280', 1, 0),
-('ml-021', 'ebbef720-dbcf-4d4e-bd8c-0e02b5afc3cd', 'Trainer', 'Trainer und Uebungsleiter', '#f59e0b', 2, 0),
-('ml-022', 'ebbef720-dbcf-4d4e-bd8c-0e02b5afc3cd', 'Supporter', 'Foerdermitglied', '#10b981', 3, 0),
-('ml-023', 'ebbef720-dbcf-4d4e-bd8c-0e02b5afc3cd', 'Verwaltung', 'Verwaltungsmitarbeiter', '#8b5cf6', 4, 0),
-('ml-024', 'ebbef720-dbcf-4d4e-bd8c-0e02b5afc3cd', 'Vorstand', 'Vorstandsmitglied', '#ef4444', 5, 0);
+-- Seed membership levels for each org (INSERT only if org exists, skips missing orgs)
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-001', id, 'Mitglied', 'Regulaeres Vereinsmitglied', '#3b82f6', 0, 1 FROM organizations WHERE id = 'org-demo-001';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-002', id, 'Passives Mitglied', 'Passives Mitglied ohne aktive Teilnahme', '#6b7280', 1, 0 FROM organizations WHERE id = 'org-demo-001';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-003', id, 'Trainer', 'Trainer und Uebungsleiter', '#f59e0b', 2, 0 FROM organizations WHERE id = 'org-demo-001';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-004', id, 'Supporter', 'Foerdermitglied', '#10b981', 3, 0 FROM organizations WHERE id = 'org-demo-001';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-005', id, 'Verwaltung', 'Verwaltungsmitarbeiter', '#8b5cf6', 4, 0 FROM organizations WHERE id = 'org-demo-001';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-006', id, 'Vorstand', 'Vorstandsmitglied', '#ef4444', 5, 0 FROM organizations WHERE id = 'org-demo-001';
+
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-007', id, 'Mitglied', 'Regulaeres Vereinsmitglied', '#3b82f6', 0, 1 FROM organizations WHERE id = '2dd25a4a-17e8-4527-8fa8-d804e52ee2ff';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-008', id, 'Passives Mitglied', 'Passives Mitglied ohne aktive Teilnahme', '#6b7280', 1, 0 FROM organizations WHERE id = '2dd25a4a-17e8-4527-8fa8-d804e52ee2ff';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-009', id, 'Trainer', 'Trainer und Uebungsleiter', '#f59e0b', 2, 0 FROM organizations WHERE id = '2dd25a4a-17e8-4527-8fa8-d804e52ee2ff';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-010', id, 'Supporter', 'Foerdermitglied', '#10b981', 3, 0 FROM organizations WHERE id = '2dd25a4a-17e8-4527-8fa8-d804e52ee2ff';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-011', id, 'Verwaltung', 'Verwaltungsmitarbeiter', '#8b5cf6', 4, 0 FROM organizations WHERE id = '2dd25a4a-17e8-4527-8fa8-d804e52ee2ff';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-012', id, 'Vorstand', 'Vorstandsmitglied', '#ef4444', 5, 0 FROM organizations WHERE id = '2dd25a4a-17e8-4527-8fa8-d804e52ee2ff';
+
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-013', id, 'Mitglied', 'Regulaeres Vereinsmitglied', '#3b82f6', 0, 1 FROM organizations WHERE id = '4f72e881-f0d3-4cc7-bf81-720b9e09658f';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-014', id, 'Passives Mitglied', 'Passives Mitglied ohne aktive Teilnahme', '#6b7280', 1, 0 FROM organizations WHERE id = '4f72e881-f0d3-4cc7-bf81-720b9e09658f';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-015', id, 'Trainer', 'Trainer und Uebungsleiter', '#f59e0b', 2, 0 FROM organizations WHERE id = '4f72e881-f0d3-4cc7-bf81-720b9e09658f';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-016', id, 'Supporter', 'Foerdermitglied', '#10b981', 3, 0 FROM organizations WHERE id = '4f72e881-f0d3-4cc7-bf81-720b9e09658f';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-017', id, 'Verwaltung', 'Verwaltungsmitarbeiter', '#8b5cf6', 4, 0 FROM organizations WHERE id = '4f72e881-f0d3-4cc7-bf81-720b9e09658f';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-018', id, 'Vorstand', 'Vorstandsmitglied', '#ef4444', 5, 0 FROM organizations WHERE id = '4f72e881-f0d3-4cc7-bf81-720b9e09658f';
+
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-019', id, 'Mitglied', 'Regulaeres Vereinsmitglied', '#3b82f6', 0, 1 FROM organizations WHERE id = 'ebbef720-dbcf-4d4e-bd8c-0e02b5afc3cd';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-020', id, 'Passives Mitglied', 'Passives Mitglied ohne aktive Teilnahme', '#6b7280', 1, 0 FROM organizations WHERE id = 'ebbef720-dbcf-4d4e-bd8c-0e02b5afc3cd';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-021', id, 'Trainer', 'Trainer und Uebungsleiter', '#f59e0b', 2, 0 FROM organizations WHERE id = 'ebbef720-dbcf-4d4e-bd8c-0e02b5afc3cd';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-022', id, 'Supporter', 'Foerdermitglied', '#10b981', 3, 0 FROM organizations WHERE id = 'ebbef720-dbcf-4d4e-bd8c-0e02b5afc3cd';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-023', id, 'Verwaltung', 'Verwaltungsmitarbeiter', '#8b5cf6', 4, 0 FROM organizations WHERE id = 'ebbef720-dbcf-4d4e-bd8c-0e02b5afc3cd';
+INSERT OR IGNORE INTO membership_levels (id, org_id, name, description, color, sort_order, is_default) SELECT 'ml-024', id, 'Vorstand', 'Vorstandsmitglied', '#ef4444', 5, 0 FROM organizations WHERE id = 'ebbef720-dbcf-4d4e-bd8c-0e02b5afc3cd';
