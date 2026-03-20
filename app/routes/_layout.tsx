@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Outlet, redirect } from "react-router";
+import { Outlet } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
-import { requireAuth } from "@/lib/auth";
-import { getEnv } from "@/lib/session";
+import { requireAuth } from "@/lib/auth.server";
+import { getEnv } from "@/lib/session.server";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { Topbar } from "@/components/layout/Topbar";
 

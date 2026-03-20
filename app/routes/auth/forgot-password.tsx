@@ -3,7 +3,7 @@ import { Link, Form, useActionData } from "react-router";
 import type { ActionFunctionArgs } from "react-router";
 import { Button, Card, TextInput, Text, Anchor } from "@mantine/core";
 import { ArrowLeft, Mail } from "lucide-react";
-import { getEnv } from "@/lib/session";
+import { getEnv } from "@/lib/session.server";
 import { forgotPasswordFormSchema } from "@/core/schemas/auth";
 import { requestPasswordReset } from "@/core/auth/auth.service";
 

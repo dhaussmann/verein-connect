@@ -1,6 +1,6 @@
 import { data } from "react-router";
 import type { ActionFunctionArgs } from "react-router";
-import { getEnv } from "@/lib/session";
+import { getEnv } from "@/lib/session.server";
 import { resolveScheduledCron, runScheduledJob } from "@/core/system/scheduler";
 import type { Env } from "@/core/types/bindings";
 

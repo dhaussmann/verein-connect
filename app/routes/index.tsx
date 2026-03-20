@@ -1,6 +1,6 @@
 import { redirect } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
-import { getSessionTokens, getEnv } from "@/lib/session";
+import { getSessionTokens, getEnv } from "@/lib/session.server";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const env = getEnv(context as Parameters<typeof getEnv>[0]);

@@ -4,7 +4,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 import { Button, Card, TextInput, Select, Checkbox, Text, Group, Anchor } from "@mantine/core";
 import { Check } from "lucide-react";
-import { getSessionTokens, commitSessionTokens, getEnv } from "@/lib/session";
+import { getSessionTokens, commitSessionTokens, getEnv } from "@/lib/session.server";
 import { registerFormSchema } from "@/core/schemas/auth";
 import { registerOrganizationWithAdmin } from "@/core/auth/auth.service";
 

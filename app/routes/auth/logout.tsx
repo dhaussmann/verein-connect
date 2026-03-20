@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
-import { destroyUserSession, getEnv } from "@/lib/session";
+import { destroyUserSession, getEnv } from "@/lib/session.server";
 
 export async function action({ request, context }: ActionFunctionArgs) {
   const env = getEnv(context as Parameters<typeof getEnv>[0]);

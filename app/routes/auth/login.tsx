@@ -4,7 +4,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 import { Button, Card, TextInput, Text, Anchor } from "@mantine/core";
 import { Eye, EyeOff } from "lucide-react";
-import { getSessionTokens, commitSessionTokens, getEnv } from "@/lib/session";
+import { getSessionTokens, commitSessionTokens, getEnv } from "@/lib/session.server";
 import { loginFormSchema } from "@/core/schemas/auth";
 import { loginWithPassword } from "@/core/auth/auth.service";
 
