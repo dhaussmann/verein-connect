@@ -14,6 +14,7 @@ import MemberNew from "@/pages/MemberNew";
 import Courses from "@/pages/Courses";
 import CourseDetail from "@/pages/CourseDetail";
 import CourseNew from "@/pages/CourseNew";
+import CourseEdit from "@/pages/CourseEdit";
 import Events from "@/pages/Events";
 import EventDetail from "@/pages/EventDetail";
 import Attendance from "@/pages/Attendance";
@@ -38,8 +39,19 @@ import ContractApplications from "@/pages/ContractApplications";
 import Groups from "@/pages/Groups";
 import GroupDetail from "@/pages/GroupDetail";
 import ContractBilling from "@/pages/ContractBilling";
+import Families from "@/pages/Families";
+import FamilyDetail from "@/pages/FamilyDetail";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error: any) => {
+        if (error?.status === 401) return false;
+        return failureCount < 2;
+      },
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -60,6 +72,7 @@ const App = () => (
             <Route path="/members/:id" element={<MemberDetail />} />
             <Route path="/courses" element={<Courses />} />
             <Route path="/courses/new" element={<CourseNew />} />
+            <Route path="/courses/:id/edit" element={<CourseEdit />} />
             <Route path="/courses/:id" element={<CourseDetail />} />
             <Route path="/events" element={<Events />} />
             <Route path="/events/new" element={<CourseNew />} />
@@ -75,6 +88,8 @@ const App = () => (
             <Route path="/contracts/:id" element={<ContractDetail />} />
             <Route path="/billing" element={<ContractBilling />} />
             <Route path="/applications" element={<ContractApplications />} />
+            <Route path="/families" element={<Families />} />
+            <Route path="/families/:id" element={<FamilyDetail />} />
             <Route path="/groups" element={<Groups />} />
             <Route path="/groups/:id" element={<GroupDetail />} />
             <Route path="/finance" element={<Finance />} />
@@ -82,8 +97,14 @@ const App = () => (
             <Route path="/shop" element={<Shop />} />
             <Route path="/files" element={<Files />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/settings/users" element={<Settings />} />
+            <Route path="/settings/general" element={<Settings />} />
+            <Route path="/settings/members" element={<Settings />} />
             <Route path="/settings/roles" element={<Settings />} />
             <Route path="/settings/fields" element={<Settings />} />
+            <Route path="/settings/notifications" element={<Settings />} />
+            <Route path="/settings/integrations" element={<Settings />} />
+            <Route path="/settings/gdpr" element={<Settings />} />
             <Route path="/portal" element={<MemberDashboard />} />
             <Route path="/portal/profile" element={<MyProfile />} />
             <Route path="/portal/courses" element={<MyCourses />} />

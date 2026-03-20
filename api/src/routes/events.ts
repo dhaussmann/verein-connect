@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/d1';
 import { eq, and, like, or, desc, asc, count, gte, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Env, AuthUser } from '../types/bindings';
-import { events, eventCategories, eventLeaders, eventRegistrations, eventOccurrences, eventTargetRoles, users, roles, invoices, invoiceItems } from '../db/schema';
+import { events, eventCategories, eventLeaders, eventRegistrations, eventOccurrences, eventTargetRoles, users, roles, invoices, invoiceItems, groups } from '../db/schema';
 import { parsePagination, buildMeta } from '../lib/pagination';
 import { NotFoundError, ValidationError, AppError } from '../lib/errors';
 import { writeAuditLog } from '../lib/audit';
@@ -18,13 +18,13 @@ const createEventSchema = z.object({
   event_type: z.enum(['single', 'recurring', 'course']),
   description: z.string().optional(),
   location: z.string().optional(),
-  start_date: z.string(),
+  start_date: z.string().optional(),
   end_date: z.string().optional(),
   recurrence_rule: z.string().optional(),
   max_participants: z.number().optional(),
   registration_deadline: z.string().optional(),
   cancellation_deadline: z.string().optional(),
-  fee_amount: z.number().optional(),
+  fee_amount: z.number().nullable().optional(),
   auto_invoice: z.boolean().optional(),
   is_public: z.boolean().optional(),
   time_start: z.string().optional(),
@@ -33,6 +33,8 @@ const createEventSchema = z.object({
   leader_ids: z.array(z.string()).optional(),
   target_role_ids: z.array(z.string()).optional(),
   status: z.string().optional(),
+  category_name: z.string().optional(),
+  group_ids: z.array(z.string()).optional(),
 });
 
 // ─── Helper: enrich event ────────────────────────────────────────────────────
@@ -50,6 +52,14 @@ async function enrichEvent(db: ReturnType<typeof drizzle>, event: any) {
     .from(eventLeaders)
     .innerJoin(users, eq(eventLeaders.userId, users.id))
     .where(eq(eventLeaders.eventId, event.id));
+
+  // Resolve groups
+  const groupIds: string[] = event.groupIds ? JSON.parse(event.groupIds) : [];
+  const resolvedGroups: { id: string; name: string }[] = [];
+  for (const gid of groupIds) {
+    const rows = await db.select({ id: groups.id, name: groups.name }).from(groups).where(eq(groups.id, gid));
+    if (rows[0]) resolvedGroups.push({ id: rows[0].id, name: rows[0].name });
+  }
 
   // Registration counts
   const regCount = await db.select({ count: count() }).from(eventRegistrations)
@@ -97,6 +107,8 @@ async function enrichEvent(db: ReturnType<typeof drizzle>, event: any) {
     targetRoles: [],
     autoInvoice: event.autoInvoice === 1,
     eventType: event.eventType,
+    groupIds,
+    groups: resolvedGroups,
     leaders: leaders.map((l) => ({
       userId: l.userId,
       name: `${l.firstName} ${l.lastName}`,
@@ -148,6 +160,84 @@ eventRoutes.get('/', async (c) => {
   return c.json({ data: enriched, meta: buildMeta(total, page, perPage) });
 });
 
+// ─── GET /v1/events/calendar ─────────────────────────────────────────────────
+eventRoutes.get('/calendar', async (c) => {
+  const user = c.get('user');
+  const db = drizzle(c.env.DB);
+  const query = c.req.query();
+
+  // Fetch occurrences within date range
+  const conditions: any[] = [];
+  if (query.start_after) conditions.push(gte(eventOccurrences.startDate, query.start_after));
+  if (query.start_before) conditions.push(lte(eventOccurrences.startDate, query.start_before));
+
+  const occurrences = await db
+    .select({
+      id: eventOccurrences.id,
+      eventId: eventOccurrences.eventId,
+      startDate: eventOccurrences.startDate,
+      endDate: eventOccurrences.endDate,
+      isCancelled: eventOccurrences.isCancelled,
+      overrideLocation: eventOccurrences.overrideLocation,
+      title: events.title,
+      location: events.location,
+      maxParticipants: events.maxParticipants,
+      timeStart: events.timeStart,
+      timeEnd: events.timeEnd,
+      categoryId: events.categoryId,
+      status: events.status,
+      groupIds: events.groupIds,
+    })
+    .from(eventOccurrences)
+    .innerJoin(events, eq(eventOccurrences.eventId, events.id))
+    .where(and(eq(events.orgId, user.orgId), ...conditions));
+
+  // Resolve category names
+  const catIds = [...new Set(occurrences.map((o) => o.categoryId).filter(Boolean))];
+  const catMap: Record<string, string> = {};
+  if (catIds.length > 0) {
+    for (const catId of catIds) {
+      const rows = await db.select().from(eventCategories).where(eq(eventCategories.id, catId!));
+      if (rows[0]) catMap[catId!] = rows[0].name;
+    }
+  }
+
+  // Resolve all group IDs
+  const allGroupIds = [...new Set(occurrences.flatMap(o => o.groupIds ? JSON.parse(o.groupIds) : []))];
+  const groupMap: Record<string, string> = {};
+  for (const gid of allGroupIds) {
+    const rows = await db.select({ id: groups.id, name: groups.name }).from(groups).where(eq(groups.id, gid));
+    if (rows[0]) groupMap[gid] = rows[0].name;
+  }
+
+  // Format for frontend
+  const formatted = occurrences.map((o) => {
+    // Convert YYYY-MM-DD to dd.MM.yyyy
+    const [y, m, d] = (o.startDate || '').split('-');
+    const dateStr = d && m && y ? `${d}.${m}.${y}` : '';
+
+    const statusMap: Record<string, string> = { active: 'Offen', draft: 'Entwurf', completed: 'Abgeschlossen', cancelled: 'Abgesagt' };
+
+    return {
+      id: o.id,
+      courseId: o.eventId,
+      title: o.title,
+      date: dateStr,
+      endDate: o.endDate,
+      timeStart: o.timeStart || '',
+      timeEnd: o.timeEnd || '',
+      category: o.categoryId ? (catMap[o.categoryId] || 'Training') : 'Training',
+      location: o.overrideLocation || o.location || '',
+      participants: 0,
+      maxParticipants: o.maxParticipants || 0,
+      status: o.isCancelled ? 'Abgesagt' : statusMap[o.status || 'active'] || 'Offen',
+      groups: (o.groupIds ? JSON.parse(o.groupIds) : []).map((gid: string) => ({ id: gid, name: groupMap[gid] || '' })).filter((g: any) => g.name),
+    };
+  });
+
+  return c.json(formatted);
+});
+
 // ─── GET /v1/events/:id ──────────────────────────────────────────────────────
 eventRoutes.get('/:id', async (c) => {
   const user = c.get('user');
@@ -183,15 +273,28 @@ eventRoutes.post('/', async (c) => {
   const db = drizzle(c.env.DB);
   const eventId = crypto.randomUUID();
 
+  // Resolve category_name to category_id
+  let categoryId = data.category_id;
+  if (!categoryId && data.category_name) {
+    const existing = await db.select().from(eventCategories)
+      .where(and(eq(eventCategories.orgId, user.orgId), eq(eventCategories.name, data.category_name)));
+    if (existing.length > 0) {
+      categoryId = existing[0].id;
+    } else {
+      categoryId = crypto.randomUUID();
+      await db.insert(eventCategories).values({ id: categoryId, orgId: user.orgId, name: data.category_name });
+    }
+  }
+
   await db.insert(events).values({
     id: eventId,
     orgId: user.orgId,
-    categoryId: data.category_id,
+    categoryId,
     title: data.title,
     description: data.description,
     eventType: data.event_type,
     location: data.location,
-    startDate: data.start_date,
+    startDate: data.start_date || '',
     endDate: data.end_date,
     recurrenceRule: data.recurrence_rule,
     maxParticipants: data.max_participants,
@@ -203,6 +306,7 @@ eventRoutes.post('/', async (c) => {
     timeStart: data.time_start,
     timeEnd: data.time_end,
     weekdays: data.weekdays ? JSON.stringify(data.weekdays) : null,
+    groupIds: data.group_ids ? JSON.stringify(data.group_ids) : null,
     status: data.status || 'active',
     createdBy: user.id,
   });
@@ -219,6 +323,15 @@ eventRoutes.post('/', async (c) => {
     for (const roleId of data.target_role_ids) {
       await db.insert(eventTargetRoles).values({ eventId, roleId });
     }
+  }
+
+  // Generate occurrence for single/course events
+  if ((data.event_type === 'single' || data.event_type === 'course') && data.start_date) {
+    await db.insert(eventOccurrences).values({
+      eventId,
+      startDate: data.start_date,
+      endDate: data.end_date || data.start_date,
+    });
   }
 
   // Generate occurrences for recurring events (simple weekly implementation)
@@ -243,7 +356,8 @@ eventRoutes.post('/', async (c) => {
 
   await writeAuditLog(c.env.DB, user.orgId, user.id, 'Event erstellt', 'event', eventId, data.title);
 
-  const enriched = await enrichEvent(db, { ...data, id: eventId, orgId: user.orgId });
+  const inserted = await db.select().from(events).where(eq(events.id, eventId));
+  const enriched = await enrichEvent(db, inserted[0]);
   return c.json(enriched, 201);
 });
 
@@ -270,6 +384,8 @@ eventRoutes.patch('/:id', async (c) => {
   if (body.auto_invoice !== undefined) updateData.autoInvoice = body.auto_invoice ? 1 : 0;
   if (body.time_start !== undefined) updateData.timeStart = body.time_start;
   if (body.time_end !== undefined) updateData.timeEnd = body.time_end;
+  if (body.weekdays !== undefined) updateData.weekdays = JSON.stringify(body.weekdays);
+  if (body.group_ids !== undefined) updateData.groupIds = JSON.stringify(body.group_ids);
 
   await db.update(events).set(updateData).where(eq(events.id, eventId));
   await writeAuditLog(c.env.DB, user.orgId, user.id, 'Event bearbeitet', 'event', eventId, JSON.stringify(body));
@@ -286,8 +402,15 @@ eventRoutes.delete('/:id', async (c) => {
   const existing = await db.select().from(events).where(and(eq(events.id, eventId), eq(events.orgId, user.orgId)));
   if (existing.length === 0) throw new NotFoundError('Event', eventId);
 
-  await db.update(events).set({ status: 'cancelled', updatedAt: new Date().toISOString() }).where(eq(events.id, eventId));
-  await writeAuditLog(c.env.DB, user.orgId, user.id, 'Event abgesagt', 'event', eventId, existing[0].title);
+  // Delete related records first
+  await db.delete(eventLeaders).where(eq(eventLeaders.eventId, eventId));
+  await db.delete(eventRegistrations).where(eq(eventRegistrations.eventId, eventId));
+  await db.delete(eventOccurrences).where(eq(eventOccurrences.eventId, eventId));
+  await db.delete(eventTargetRoles).where(eq(eventTargetRoles.eventId, eventId));
+  // Delete the event itself
+  await db.delete(events).where(eq(events.id, eventId));
+
+  await writeAuditLog(c.env.DB, user.orgId, user.id, 'Event gelöscht', 'event', eventId, existing[0].title);
 
   return c.json({ success: true });
 });
@@ -425,35 +548,3 @@ eventRoutes.get('/:id/registrations', async (c) => {
   return c.json({ registered, waitlist, cancelled });
 });
 
-// ─── GET /v1/events/calendar ─────────────────────────────────────────────────
-eventRoutes.get('/calendar', async (c) => {
-  const user = c.get('user');
-  const db = drizzle(c.env.DB);
-  const query = c.req.query();
-
-  // Fetch occurrences within date range
-  const conditions: any[] = [];
-  if (query.start_after) conditions.push(gte(eventOccurrences.startDate, query.start_after));
-  if (query.start_before) conditions.push(lte(eventOccurrences.startDate, query.start_before));
-
-  const occurrences = await db
-    .select({
-      id: eventOccurrences.id,
-      eventId: eventOccurrences.eventId,
-      startDate: eventOccurrences.startDate,
-      endDate: eventOccurrences.endDate,
-      isCancelled: eventOccurrences.isCancelled,
-      overrideLocation: eventOccurrences.overrideLocation,
-      title: events.title,
-      location: events.location,
-      maxParticipants: events.maxParticipants,
-      timeStart: events.timeStart,
-      timeEnd: events.timeEnd,
-      categoryId: events.categoryId,
-    })
-    .from(eventOccurrences)
-    .innerJoin(events, eq(eventOccurrences.eventId, events.id))
-    .where(and(eq(events.orgId, user.orgId), ...conditions));
-
-  return c.json(occurrences);
-});

@@ -3,11 +3,13 @@ import {
   membersApi, rolesApi, eventsApi, attendanceApi,
   communicationApi, financeApi, shopApi, filesApi, settingsApi, portalApi,
   contractsApi, membershipTypesApi, tarifsApi, discountGroupsApi, groupsApi,
-  billingApi, contractSettingsApi, contractApplicationsApi, bankAccountApi,
+  billingApi, contractSettingsApi, contractApplicationsApi, bankAccountApi, guardianApi, familyApi,
+  membershipLevelsApi,
   type Member, type PaginatedResponse, type Role, type Event,
   type Contract, type ContractDetail, type MembershipType, type Tarif,
   type DiscountGroup, type Group, type ContractApplication, type ContractSettings,
-  type BankAccount,
+  type BankAccount, type Guardian, type FamilyProfile, type FamilyDetail, type FamilyCreateData,
+  type MembershipLevel,
 } from '@/lib/api';
 
 // ─── Members ─────────────────────────────────────────────────────────────────
@@ -75,6 +77,111 @@ export function useDeleteBankAccount() {
   return useMutation({
     mutationFn: (memberId: string) => bankAccountApi.delete(memberId),
     onSuccess: (_d, memberId) => { qc.invalidateQueries({ queryKey: ['bank-account', memberId] }); },
+  });
+}
+
+// ─── Guardians (Erziehungsberechtigte) ──────────────────────────────────────
+
+export function useGuardians(memberId: string | undefined) {
+  return useQuery({
+    queryKey: ['guardians', memberId],
+    queryFn: () => guardianApi.list(memberId!),
+    enabled: !!memberId,
+  });
+}
+
+export function useCreateGuardian() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ memberId, data }: { memberId: string; data: Parameters<typeof guardianApi.create>[1] }) =>
+      guardianApi.create(memberId, data),
+    onSuccess: (_d, vars) => { qc.invalidateQueries({ queryKey: ['guardians', vars.memberId] }); },
+  });
+}
+
+export function useUpdateGuardian() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ memberId, guardianId, data }: { memberId: string; guardianId: string; data: Parameters<typeof guardianApi.update>[2] }) =>
+      guardianApi.update(memberId, guardianId, data),
+    onSuccess: (_d, vars) => { qc.invalidateQueries({ queryKey: ['guardians', vars.memberId] }); },
+  });
+}
+
+export function useDeleteGuardian() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ memberId, guardianId }: { memberId: string; guardianId: string }) =>
+      guardianApi.delete(memberId, guardianId),
+    onSuccess: (_d, vars) => { qc.invalidateQueries({ queryKey: ['guardians', vars.memberId] }); },
+  });
+}
+
+// ─── Families (Familienprofile) ──────────────────────────────────────────────
+
+export function useFamilies() {
+  return useQuery({
+    queryKey: ['families'],
+    queryFn: () => familyApi.list(),
+  });
+}
+
+export function useFamily(id: string | undefined) {
+  return useQuery({
+    queryKey: ['families', id],
+    queryFn: () => familyApi.get(id!),
+    enabled: !!id,
+  });
+}
+
+export function useCreateFamily() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: FamilyCreateData) => familyApi.create(data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['families'] }); },
+  });
+}
+
+export function useUpdateFamily() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: FamilyCreateData }) => familyApi.update(id, data),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ['families'] });
+      qc.invalidateQueries({ queryKey: ['families', vars.id] });
+    },
+  });
+}
+
+export function useDeleteFamily() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => familyApi.delete(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['families'] }); },
+  });
+}
+
+export function useAddFamilyMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ familyId, data }: { familyId: string; data: { user_id: string; relationship?: string } }) =>
+      familyApi.addMember(familyId, data),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ['families'] });
+      qc.invalidateQueries({ queryKey: ['families', vars.familyId] });
+    },
+  });
+}
+
+export function useRemoveFamilyMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ familyId, userId }: { familyId: string; userId: string }) =>
+      familyApi.removeMember(familyId, userId),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ['families'] });
+      qc.invalidateQueries({ queryKey: ['families', vars.familyId] });
+    },
   });
 }
 
@@ -178,7 +285,13 @@ export function useDeleteEvent() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => eventsApi.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['events'] }); },
+    onSuccess: (_data, deletedId) => {
+      qc.removeQueries({ queryKey: ['events', deletedId] });
+      qc.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'events' && query.queryKey[1] !== deletedId,
+      });
+    },
   });
 }
 
@@ -372,6 +485,46 @@ export function useProfileFields() {
   return useQuery({
     queryKey: ['profile-fields'],
     queryFn: () => settingsApi.listProfileFields(),
+  });
+}
+
+export function useCreateProfileField() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) => settingsApi.createProfileField(data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['profile-fields'] }); },
+  });
+}
+
+export function useUpdateProfileField() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; [key: string]: unknown }) => settingsApi.updateProfileField(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['profile-fields'] }); },
+  });
+}
+
+export function useDeleteProfileField() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => settingsApi.deleteProfileField(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['profile-fields'] }); },
+  });
+}
+
+export function useUpdateOrganization() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) => settingsApi.updateOrganization(data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['organization-settings'] }); },
+  });
+}
+
+export function useUploadLogo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => settingsApi.uploadLogo(file),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['organization-settings'] }); },
   });
 }
 
@@ -605,7 +758,7 @@ export function useGroupMembers(groupId?: string) {
 export function useCreateGroup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { name: string; description?: string; category?: string }) => groupsApi.create(data),
+    mutationFn: (data: { name: string; description?: string; category?: string; parent_group_id?: string }) => groupsApi.create(data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['groups'] }); },
   });
 }
@@ -613,7 +766,7 @@ export function useCreateGroup() {
 export function useUpdateGroup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { name: string; description?: string; category?: string } }) => groupsApi.update(id, data),
+    mutationFn: ({ id, data }: { id: string; data: { name: string; description?: string; category?: string; parent_group_id?: string } }) => groupsApi.update(id, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['groups'] }); },
   });
 }
@@ -711,5 +864,40 @@ export function useUpdateContractSettings() {
   return useMutation({
     mutationFn: (data: Partial<ContractSettings>) => contractSettingsApi.update(data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['contract-settings'] }); },
+  });
+}
+
+// ─── Membership Levels ──────────────────────────────────────────────────────
+
+export function useMembershipLevels() {
+  return useQuery({
+    queryKey: ['membership-levels'],
+    queryFn: () => membershipLevelsApi.list(),
+  });
+}
+
+export function useCreateMembershipLevel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string; description?: string; color?: string; sort_order?: number; is_default?: boolean }) =>
+      membershipLevelsApi.create(data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['membership-levels'] }); },
+  });
+}
+
+export function useUpdateMembershipLevel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; name?: string; description?: string; color?: string; sort_order?: number; is_default?: boolean }) =>
+      membershipLevelsApi.update(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['membership-levels'] }); },
+  });
+}
+
+export function useDeleteMembershipLevel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => membershipLevelsApi.delete(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['membership-levels'] }); },
   });
 }

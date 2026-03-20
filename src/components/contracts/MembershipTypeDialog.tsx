@@ -66,6 +66,8 @@ export interface MembershipTypeFormData {
   renewal_duration_months: string;
   renewal_cancellation_days: string;
   self_registration_enabled: boolean;
+  is_family_tarif: boolean;
+  min_family_members: string;
   sort_order: string;
   pricing: PricingRow[];
 }
@@ -89,6 +91,8 @@ function emptyForm(): MembershipTypeFormData {
     renewal_duration_months: '1',
     renewal_cancellation_days: '1',
     self_registration_enabled: false,
+    is_family_tarif: false,
+    min_family_members: '3',
     sort_order: '0',
     pricing: [{ billing_period: 'MONTHLY', price: '' }],
   };
@@ -113,6 +117,8 @@ function fromMembershipType(mt: MembershipType): MembershipTypeFormData {
     renewal_duration_months: String(mt.renewalDurationMonths ?? 1),
     renewal_cancellation_days: String(mt.renewalCancellationDays ?? 1),
     self_registration_enabled: mt.selfRegistrationEnabled === 1,
+    is_family_tarif: mt.isFamilyTarif === 1,
+    min_family_members: String(mt.minFamilyMembers ?? 3),
     sort_order: String(mt.sortOrder ?? 0),
     pricing: mt.pricing?.length
       ? mt.pricing.map(p => ({ billing_period: p.billingPeriod, price: String(p.price) }))
@@ -139,6 +145,8 @@ export function toApiPayload(form: MembershipTypeFormData) {
     cancellation_notice_basis: form.cancellation_notice_basis,
     renewal_cancellation_days: parseInt(form.renewal_cancellation_days) || undefined,
     default_group_id: form.default_group_id || null,
+    is_family_tarif: form.is_family_tarif,
+    min_family_members: parseInt(form.min_family_members) || 3,
     sort_order: parseInt(form.sort_order) || 0,
     pricing: form.pricing
       .filter(p => p.price !== '' && !isNaN(parseFloat(p.price)))
@@ -497,6 +505,35 @@ export default function MembershipTypeDialog({ open, onOpenChange, editItem, gro
                 onCheckedChange={v => set('self_registration_enabled', v)}
               />
             </div>
+
+            <div className="flex items-center justify-between p-4 border rounded-md">
+              <div>
+                <Label className="font-medium">Familientarif</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Vertrag gilt für ein Familienprofil (Festpreis für alle Familienmitglieder)
+                </p>
+              </div>
+              <Switch
+                checked={form.is_family_tarif}
+                onCheckedChange={v => set('is_family_tarif', v)}
+              />
+            </div>
+
+            {form.is_family_tarif && (
+              <div>
+                <Label className="text-xs uppercase text-muted-foreground">Mindestanzahl Familienmitglieder</Label>
+                <Input
+                  type="number"
+                  min="2"
+                  value={form.min_family_members}
+                  onChange={e => set('min_family_members', e.target.value)}
+                  className="w-24"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Ein Familienprofil muss mindestens diese Anzahl Mitglieder haben
+                </p>
+              </div>
+            )}
 
             <div>
               <Label className="text-xs uppercase text-muted-foreground">Sortierung</Label>

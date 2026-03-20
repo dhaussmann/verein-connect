@@ -212,6 +212,7 @@ export default function Members() {
                   <TableHead className="hidden md:table-cell cursor-pointer select-none" onClick={() => toggleSort('email')}>E-Mail <SortIcon k="email" /></TableHead>
                   <TableHead className="hidden lg:table-cell cursor-pointer select-none" onClick={() => toggleSort('memberNumber')}>Mitgliedsnr. <SortIcon k="memberNumber" /></TableHead>
                   <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('status')}>Status <SortIcon k="status" /></TableHead>
+                  <TableHead className="hidden md:table-cell">Level</TableHead>
                   <TableHead className="hidden md:table-cell">Rollen</TableHead>
                   <TableHead className="hidden lg:table-cell cursor-pointer select-none" onClick={() => toggleSort('joinDate')}>Beitritt <SortIcon k="joinDate" /></TableHead>
                   <TableHead className="w-10" />
@@ -235,6 +236,20 @@ export default function Members() {
                     <TableCell className="hidden lg:table-cell text-muted-foreground font-mono text-xs">{m.memberNumber}</TableCell>
                     <TableCell>
                       <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusClass(m.status)}`}>{m.status}</span>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {(m.membershipLevels || []).length > 0 ? (
+                        <div className="flex gap-1 flex-wrap">
+                          {(m.membershipLevels || []).map(ml => (
+                            <span key={ml.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: ml.color + '18', color: ml.color }}>
+                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: ml.color }} />
+                              {ml.name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">–</span>
+                      )}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       <div className="flex gap-1 flex-wrap">

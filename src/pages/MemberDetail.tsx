@@ -17,10 +17,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
   Pencil, MessageSquare, QrCode, MoreHorizontal, UserMinus, Trash2,
-  Link as LinkIcon, Calendar as CalIcon, FileText, X, Plus, Building2,
+  Link as LinkIcon, Calendar as CalIcon, FileText, X, Plus, Building2, ShieldCheck,
 } from 'lucide-react';
-import { useMember, useUpdateMember, useDeleteMember, useContracts, useGroups, useAddGroupMember, useRemoveGroupMember, useRoles, useProfileFields, useBankAccount, useUpsertBankAccount, useDeleteBankAccount } from '@/hooks/use-api';
+import { useMember, useUpdateMember, useDeleteMember, useContracts, useGroups, useAddGroupMember, useRemoveGroupMember, useRoles, useAssignRole, useRemoveRole, useProfileFields, useBankAccount, useUpsertBankAccount, useDeleteBankAccount, useGuardians, useCreateGuardian, useUpdateGuardian, useDeleteGuardian, useFamilies, useMembershipLevels } from '@/hooks/use-api';
+import type { Guardian } from '@/lib/api';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toast } from 'sonner';
 
 const statusClass = (s: string) =>
@@ -43,12 +45,23 @@ export default function MemberDetail() {
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const { data: rolesData } = useRoles();
+  const assignRole = useAssignRole();
+  const removeRole = useRemoveRole();
   const { data: profileFieldsData } = useProfileFields();
   const { data: bankAccount, isLoading: bankLoading } = useBankAccount(id);
   const upsertBank = useUpsertBankAccount();
   const deleteBank = useDeleteBankAccount();
   const [bankEditing, setBankEditing] = useState(false);
   const [bankForm, setBankForm] = useState({ accountHolder: '', iban: '', bic: '', bankName: '', sepaMandate: false, sepaMandateDate: '', sepaMandateRef: '' });
+  const { data: guardiansData, isLoading: guardiansLoading } = useGuardians(id);
+  const createGuardian = useCreateGuardian();
+  const updateGuardian = useUpdateGuardian();
+  const deleteGuardian = useDeleteGuardian();
+  const [guardianEditing, setGuardianEditing] = useState<string | 'new' | null>(null);
+  const [guardianForm, setGuardianForm] = useState({ firstName: '', lastName: '', street: '', zip: '', city: '', phone: '', email: '' });
+  const { data: familiesData } = useFamilies();
+  const { data: levelsData } = useMembershipLevels();
+  const membershipLevels = levelsData?.data ?? [];
 
   if (isLoading) {
     return (
@@ -102,8 +115,67 @@ export default function MemberDetail() {
             <div className="flex-1 min-w-0">
               <h1 className="text-2xl font-semibold">{member.firstName} {member.lastName}</h1>
               <p className="text-sm text-muted-foreground font-mono">{member.memberNumber}</p>
-              <div className="flex flex-wrap gap-2 mt-2">
+              <div className="flex flex-wrap gap-2 mt-2 items-center">
                 <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusClass(member.status)}`}>{member.status}</span>
+                {(member.membershipLevels || []).map(ml => (
+                  <span key={ml.id} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: ml.color + '20', color: ml.color }}>
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: ml.color }} />
+                    {ml.name}
+                    <button
+                      className="ml-0.5 rounded-full p-0.5 hover:bg-black/10 transition-colors"
+                      title={`"${ml.name}" entfernen`}
+                      onClick={async () => {
+                        const next = (member.membershipLevels || []).filter(l => l.id !== ml.id);
+                        try {
+                          await updateMember.mutateAsync({ id: id!, data: { membershipLevels: next } });
+                          toast.success(`"${ml.name}" entfernt`);
+                        } catch (err: any) {
+                          toast.error(err.message || 'Fehler');
+                        }
+                      }}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border border-dashed border-muted-foreground/40 text-muted-foreground hover:bg-muted/50 transition-colors">
+                      <Plus className="h-3 w-3" />Level
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-56 p-2" align="start">
+                    <p className="text-xs font-medium text-muted-foreground px-2 pb-2">Mitgliedschaftslevel</p>
+                    {membershipLevels.map(l => {
+                      const isAssigned = (member.membershipLevels || []).some(ml => ml.id === l.id);
+                      return (
+                        <button
+                          key={l.id}
+                          className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm hover:bg-muted/50 transition-colors"
+                          onClick={async () => {
+                            const current = member.membershipLevels || [];
+                            const next = isAssigned
+                              ? current.filter(ml => ml.id !== l.id)
+                              : [...current, { id: l.id, name: l.name, color: l.color }];
+                            try {
+                              await updateMember.mutateAsync({ id: id!, data: { membershipLevels: next } });
+                              toast.success(isAssigned ? `"${l.name}" entfernt` : `"${l.name}" zugewiesen`);
+                            } catch (err: any) {
+                              toast.error(err.message || 'Fehler');
+                            }
+                          }}
+                        >
+                          <Checkbox checked={isAssigned} className="pointer-events-none" />
+                          <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: l.color }} />
+                          <span className="truncate">{l.name}</span>
+                        </button>
+                      );
+                    })}
+                    {membershipLevels.length === 0 && (
+                      <p className="text-xs text-muted-foreground px-2 py-2">Keine Level vorhanden. Erstelle Level unter Einstellungen → Mitglieder.</p>
+                    )}
+                  </PopoverContent>
+                </Popover>
                 {member.roles.map((r) => <Badge key={r} variant="secondary" className="text-xs">{r}</Badge>)}
               </div>
             </div>
@@ -151,6 +223,7 @@ export default function MemberDetail() {
           <TabsTrigger value="vertraege">Verträge</TabsTrigger>
           <TabsTrigger value="finanzen">Finanzen</TabsTrigger>
           <TabsTrigger value="kontoverbindung">Kontoverbindung</TabsTrigger>
+          <TabsTrigger value="erziehungsberechtigte">Erziehungsberechtigte</TabsTrigger>
           <TabsTrigger value="familie">Familie</TabsTrigger>
         </TabsList>
 
@@ -199,6 +272,7 @@ export default function MemberDetail() {
                     <TableHead>Rolle</TableHead>
                     <TableHead>Seit</TableHead>
                     <TableHead>Ende</TableHead>
+                    <TableHead className="w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -207,6 +281,19 @@ export default function MemberDetail() {
                       <TableCell><Badge variant="secondary">{ra.role}</Badge></TableCell>
                       <TableCell className="text-muted-foreground">{ra.startDate}</TableCell>
                       <TableCell className="text-muted-foreground">–</TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={async () => {
+                          const roleObj = allRoles.find((r: any) => r.name === ra.role);
+                          if (!roleObj || !id) return;
+                          if (!confirm(`Rolle "${ra.role}" entfernen?`)) return;
+                          try {
+                            await removeRole.mutateAsync({ roleId: roleObj.id, userId: id });
+                            toast.success('Rolle entfernt');
+                          } catch (err: any) {
+                            toast.error(err.message || 'Fehler beim Entfernen');
+                          }
+                        }}><X className="h-4 w-4" /></Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -444,12 +531,191 @@ export default function MemberDetail() {
           </Card>
         </TabsContent>
 
+        {/* Tab: Erziehungsberechtigte */}
+        <TabsContent value="erziehungsberechtigte">
+          <Card className="bg-popover shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-base flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> Erziehungsberechtigte</CardTitle>
+              {guardianEditing === null && (
+                <Button size="sm" onClick={() => {
+                  setGuardianForm({
+                    firstName: '', lastName: '',
+                    street: member.street || '', zip: member.zip || '', city: member.city || '',
+                    phone: '', email: '',
+                  });
+                  setGuardianEditing('new');
+                }}><Plus className="h-4 w-4 mr-1" />Hinzufügen</Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                const birthStr = member.birthDate;
+                let isMinor = false;
+                if (birthStr) {
+                  const parts = birthStr.split('.');
+                  if (parts.length === 3) {
+                    const bd = new Date(+parts[2], +parts[1] - 1, +parts[0]);
+                    isMinor = !isNaN(bd.getTime()) && (Date.now() - bd.getTime()) / (365.25 * 24 * 60 * 60 * 1000) < 18;
+                  }
+                }
+                const list = guardiansData || [];
+
+                return (
+                  <>
+                    {isMinor && list.length === 0 && guardianEditing === null && (
+                      <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 mb-4">
+                        <p className="text-sm text-warning font-medium">⚠ Dieses Mitglied ist unter 18 Jahren. Bitte mindestens einen Erziehungsberechtigten angeben.</p>
+                      </div>
+                    )}
+
+                    {guardiansLoading ? (
+                      <p className="text-sm text-muted-foreground py-8 text-center">Wird geladen...</p>
+                    ) : list.length === 0 && guardianEditing === null ? (
+                      <p className="text-sm text-muted-foreground text-center py-8">Keine Erziehungsberechtigten hinterlegt.</p>
+                    ) : (
+                      <div className="space-y-4">
+                        {list.map((g: Guardian) => (
+                          guardianEditing === g.id ? (
+                            <div key={g.id} className="border rounded-lg p-4 space-y-4">
+                              <p className="text-sm font-semibold">Erziehungsberechtigten bearbeiten</p>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-1"><Label className="text-xs text-muted-foreground">Vorname *</Label><Input value={guardianForm.firstName} onChange={e => setGuardianForm(f => ({ ...f, firstName: e.target.value }))} /></div>
+                                <div className="space-y-1"><Label className="text-xs text-muted-foreground">Nachname *</Label><Input value={guardianForm.lastName} onChange={e => setGuardianForm(f => ({ ...f, lastName: e.target.value }))} /></div>
+                                <div className="space-y-1"><Label className="text-xs text-muted-foreground">Straße</Label><Input value={guardianForm.street} onChange={e => setGuardianForm(f => ({ ...f, street: e.target.value }))} /></div>
+                                <div className="space-y-1"><Label className="text-xs text-muted-foreground">PLZ</Label><Input value={guardianForm.zip} onChange={e => setGuardianForm(f => ({ ...f, zip: e.target.value }))} /></div>
+                                <div className="space-y-1"><Label className="text-xs text-muted-foreground">Stadt</Label><Input value={guardianForm.city} onChange={e => setGuardianForm(f => ({ ...f, city: e.target.value }))} /></div>
+                                <div className="space-y-1"><Label className="text-xs text-muted-foreground">Telefon</Label><Input value={guardianForm.phone} onChange={e => setGuardianForm(f => ({ ...f, phone: e.target.value }))} /></div>
+                                <div className="space-y-1"><Label className="text-xs text-muted-foreground">E-Mail</Label><Input type="email" value={guardianForm.email} onChange={e => setGuardianForm(f => ({ ...f, email: e.target.value }))} /></div>
+                              </div>
+                              <div className="flex gap-2 pt-2">
+                                <Button disabled={updateGuardian.isPending || !guardianForm.firstName || !guardianForm.lastName} onClick={() => {
+                                  updateGuardian.mutate({ memberId: id!, guardianId: g.id, data: {
+                                    first_name: guardianForm.firstName, last_name: guardianForm.lastName,
+                                    street: guardianForm.street || null, zip: guardianForm.zip || null, city: guardianForm.city || null,
+                                    phone: guardianForm.phone || null, email: guardianForm.email || null,
+                                  }}, {
+                                    onSuccess: () => { toast.success('Erziehungsberechtigter aktualisiert'); setGuardianEditing(null); },
+                                    onError: (e: any) => toast.error(e.message),
+                                  });
+                                }}>{updateGuardian.isPending ? 'Speichern...' : 'Speichern'}</Button>
+                                <Button variant="outline" onClick={() => setGuardianEditing(null)}>Abbrechen</Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div key={g.id} className="border rounded-lg p-4">
+                              <div className="flex items-start justify-between">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 flex-1">
+                                  <div><p className="text-xs text-muted-foreground">Name</p><p className="text-sm font-medium">{g.firstName} {g.lastName}</p></div>
+                                  <div><p className="text-xs text-muted-foreground">E-Mail</p><p className="text-sm font-medium">{g.email || '–'}</p></div>
+                                  <div><p className="text-xs text-muted-foreground">Adresse</p><p className="text-sm font-medium">{[g.street, `${g.zip || ''} ${g.city || ''}`.trim()].filter(Boolean).join(', ') || '–'}</p></div>
+                                  <div><p className="text-xs text-muted-foreground">Telefon</p><p className="text-sm font-medium">{g.phone || '–'}</p></div>
+                                </div>
+                                <div className="flex gap-2 ml-4 shrink-0">
+                                  <Button size="sm" variant="outline" onClick={() => {
+                                    setGuardianForm({
+                                      firstName: g.firstName, lastName: g.lastName,
+                                      street: g.street || '', zip: g.zip || '', city: g.city || '',
+                                      phone: g.phone || '', email: g.email || '',
+                                    });
+                                    setGuardianEditing(g.id);
+                                  }}><Pencil className="h-4 w-4" /></Button>
+                                  <Button size="sm" variant="destructive" onClick={() => {
+                                    if (confirm(`${g.firstName} ${g.lastName} wirklich löschen?`)) {
+                                      deleteGuardian.mutate({ memberId: id!, guardianId: g.id }, {
+                                        onSuccess: () => toast.success('Erziehungsberechtigter gelöscht'),
+                                        onError: (e: any) => toast.error(e.message),
+                                      });
+                                    }
+                                  }}><Trash2 className="h-4 w-4" /></Button>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        ))}
+                      </div>
+                    )}
+
+                    {guardianEditing === 'new' && (
+                      <div className="border rounded-lg p-4 space-y-4 mt-4">
+                        <p className="text-sm font-semibold">Neuer Erziehungsberechtigter</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1"><Label className="text-xs text-muted-foreground">Vorname *</Label><Input value={guardianForm.firstName} onChange={e => setGuardianForm(f => ({ ...f, firstName: e.target.value }))} /></div>
+                          <div className="space-y-1"><Label className="text-xs text-muted-foreground">Nachname *</Label><Input value={guardianForm.lastName} onChange={e => setGuardianForm(f => ({ ...f, lastName: e.target.value }))} /></div>
+                          <div className="space-y-1"><Label className="text-xs text-muted-foreground">Straße</Label><Input value={guardianForm.street} onChange={e => setGuardianForm(f => ({ ...f, street: e.target.value }))} /></div>
+                          <div className="space-y-1"><Label className="text-xs text-muted-foreground">PLZ</Label><Input value={guardianForm.zip} onChange={e => setGuardianForm(f => ({ ...f, zip: e.target.value }))} /></div>
+                          <div className="space-y-1"><Label className="text-xs text-muted-foreground">Stadt</Label><Input value={guardianForm.city} onChange={e => setGuardianForm(f => ({ ...f, city: e.target.value }))} /></div>
+                          <div className="space-y-1"><Label className="text-xs text-muted-foreground">Telefon</Label><Input value={guardianForm.phone} onChange={e => setGuardianForm(f => ({ ...f, phone: e.target.value }))} /></div>
+                          <div className="space-y-1"><Label className="text-xs text-muted-foreground">E-Mail</Label><Input type="email" value={guardianForm.email} onChange={e => setGuardianForm(f => ({ ...f, email: e.target.value }))} /></div>
+                        </div>
+                        <div className="flex gap-2 pt-2">
+                          <Button disabled={createGuardian.isPending || !guardianForm.firstName || !guardianForm.lastName} onClick={() => {
+                            createGuardian.mutate({ memberId: id!, data: {
+                              first_name: guardianForm.firstName, last_name: guardianForm.lastName,
+                              street: guardianForm.street || null, zip: guardianForm.zip || null, city: guardianForm.city || null,
+                              phone: guardianForm.phone || null, email: guardianForm.email || null,
+                            }}, {
+                              onSuccess: () => { toast.success('Erziehungsberechtigter angelegt'); setGuardianEditing(null); },
+                              onError: (e: any) => toast.error(e.message),
+                            });
+                          }}>{createGuardian.isPending ? 'Speichern...' : 'Speichern'}</Button>
+                          <Button variant="outline" onClick={() => setGuardianEditing(null)}>Abbrechen</Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Tab: Familie */}
         <TabsContent value="familie">
           <Card className="bg-popover shadow-sm">
-            <CardContent className="p-8 text-center">
-              <p className="text-muted-foreground text-sm">Kein Familienprofil vorhanden.</p>
-              <Button variant="outline" className="mt-4"><LinkIcon className="h-4 w-4 mr-1" />Familienmitglied verknüpfen</Button>
+            <CardContent className="p-6">
+              {(() => {
+                const familiesQuery = familiesData || [];
+                const myFamily = familiesQuery.find((f: any) => f.members?.some((m: any) => m.userId === id));
+                if (myFamily) {
+                  return (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold">{myFamily.name}</p>
+                          <p className="text-sm text-muted-foreground">VP: {myFamily.contractPartnerFirstName} {myFamily.contractPartnerLastName}</p>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={() => navigate(`/families/${myFamily.id}`)}>
+                          <LinkIcon className="h-4 w-4 mr-1" />Profil öffnen
+                        </Button>
+                      </div>
+                      <div className="border-t pt-3">
+                        <p className="text-xs text-muted-foreground mb-2">Familienmitglieder ({myFamily.members?.length || 0})</p>
+                        <div className="space-y-2">
+                          {(myFamily.members || []).map((m: any) => (
+                            <div key={m.userId} className="flex items-center gap-2">
+                              <span className="text-sm font-medium">{m.firstName} {m.lastName}</span>
+                              {m.userId === id && <Badge variant="outline" className="text-xs">Dieses Mitglied</Badge>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {myFamily.hasActiveContract && (
+                        <div className="border-t pt-3">
+                          <Badge className="bg-success/10 text-success">Aktiver Vertrag: {myFamily.activeContractNumber}</Badge>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                return (
+                  <div className="text-center py-4">
+                    <p className="text-muted-foreground text-sm">Kein Familienprofil vorhanden.</p>
+                    <Button variant="outline" className="mt-4" onClick={() => navigate('/families')}>
+                      <LinkIcon className="h-4 w-4 mr-1" />Familienprofile verwalten
+                    </Button>
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>
@@ -507,7 +773,7 @@ export default function MemberDetail() {
               <Select value={newRole} onValueChange={setNewRole}>
                 <SelectTrigger><SelectValue placeholder="Rolle wählen" /></SelectTrigger>
                 <SelectContent>
-                  {allRoles.map((r) => <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
+                  {allRoles.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -518,7 +784,17 @@ export default function MemberDetail() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRoleModalOpen(false)}>Abbrechen</Button>
-            <Button onClick={() => setRoleModalOpen(false)}>Zuweisen</Button>
+            <Button disabled={!newRole || assignRole.isPending} onClick={async () => {
+              if (!id || !newRole) return;
+              try {
+                await assignRole.mutateAsync({ roleId: newRole, userId: id });
+                toast.success('Rolle zugewiesen');
+                setRoleModalOpen(false);
+                setNewRole('');
+              } catch (err: any) {
+                toast.error(err.message || 'Fehler beim Zuweisen');
+              }
+            }}>Zuweisen</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

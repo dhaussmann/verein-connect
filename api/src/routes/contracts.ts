@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { Env, AuthUser } from '../types/bindings';
 import {
   contracts, contractPauses, users, groups, membershipTypes, tarifs, tarifPricing,
-  invoices, invoiceItems,
+  invoices, invoiceItems, families, familyMembers,
 } from '../db/schema';
 import { parsePagination, buildMeta } from '../lib/pagination';
 import { NotFoundError, ValidationError, ConflictError, AppError } from '../lib/errors';
@@ -32,11 +32,12 @@ async function nextInvoiceNumber(db: ReturnType<typeof drizzle>, orgId: string):
 
 // ─── Schemas ────────────────────────────────────────────────────────────────
 const createContractSchema = z.object({
-  member_id: z.string(),
+  member_id: z.string().optional(),
   contract_kind: z.enum(['MEMBERSHIP', 'TARIF']),
   membership_type_id: z.string().optional(),
   tarif_id: z.string().optional(),
   parent_contract_id: z.string().optional(),
+  family_id: z.string().optional(),
   group_id: z.string().optional(),
   start_date: z.string(),
   end_date: z.string().optional(),
@@ -97,6 +98,12 @@ contractRoutes.get('/', async (c) => {
       groupName = g[0]?.name || '';
     }
 
+    let familyName = '';
+    if (c_row.familyId) {
+      const fam = await db.select({ name: families.name }).from(families).where(eq(families.id, c_row.familyId));
+      familyName = fam[0]?.name || '';
+    }
+
     const member = memberRow[0];
     return {
       id: c_row.id,
@@ -109,6 +116,8 @@ contractRoutes.get('/', async (c) => {
       typeName,
       groupId: c_row.groupId,
       groupName,
+      familyId: c_row.familyId,
+      familyName,
       status: c_row.status,
       startDate: c_row.startDate,
       endDate: c_row.endDate,
@@ -175,11 +184,39 @@ contractRoutes.get('/:id', async (c) => {
     createdByName = cb[0] ? `${cb[0].firstName} ${cb[0].lastName}` : '';
   }
 
+  // Family members (for Familientarif)
+  let familyName = '';
+  let resolvedFamilyMembers: any[] = [];
+  if (contract.familyId) {
+    const fam = await db.select({ name: families.name }).from(families).where(eq(families.id, contract.familyId));
+    familyName = fam[0]?.name || '';
+    const fmRows = await db.select({
+      userId: familyMembers.userId,
+      relationship: familyMembers.relationship,
+    }).from(familyMembers).where(eq(familyMembers.familyId, contract.familyId));
+    for (const fm of fmRows) {
+      const u = await db.select({
+        id: users.id, firstName: users.firstName, lastName: users.lastName, email: users.email,
+      }).from(users).where(eq(users.id, fm.userId));
+      if (u[0]) {
+        resolvedFamilyMembers.push({
+          id: u[0].id,
+          firstName: u[0].firstName,
+          lastName: u[0].lastName,
+          email: u[0].email,
+          relationship: fm.relationship || 'Mitglied',
+        });
+      }
+    }
+  }
+
   return c.json({
     ...contract,
     typeName,
     groupName,
+    familyName,
     createdByName,
+    familyMembers: resolvedFamilyMembers,
     member: member ? {
       id: member.id,
       firstName: member.firstName,
@@ -218,6 +255,47 @@ contractRoutes.post('/', async (c) => {
     if (t[0]) defaults = t[0];
   }
 
+  // Family tarif validation
+  let resolvedMemberId = data.member_id || '';
+  if (defaults.isFamilyTarif) {
+    if (!data.family_id) {
+      throw new ValidationError('Familientarif erfordert ein Familienprofil', { family_id: ['Familienprofil ist erforderlich'] });
+    }
+    const familyRows = await db.select().from(families).where(and(eq(families.id, data.family_id), eq(families.orgId, user.orgId)));
+    if (familyRows.length === 0) {
+      throw new NotFoundError('Familienprofil', data.family_id);
+    }
+    const fMembers = await db.select().from(familyMembers).where(eq(familyMembers.familyId, data.family_id));
+    const minMembers = defaults.minFamilyMembers || 3;
+    if (fMembers.length < minMembers) {
+      throw new ValidationError(`Familientarif erfordert mindestens ${minMembers} Familienmitglieder`, { family_id: [`Mindestens ${minMembers} Mitglieder erforderlich`] });
+    }
+    // Validate contract partner is of age
+    const family = familyRows[0];
+    if (family.contractPartnerBirthDate) {
+      const parts = family.contractPartnerBirthDate.split('.');
+      let bd: Date;
+      if (parts.length === 3) {
+        bd = new Date(+parts[2], +parts[1] - 1, +parts[0]);
+      } else {
+        bd = new Date(family.contractPartnerBirthDate);
+      }
+      if (!isNaN(bd.getTime())) {
+        const age = (Date.now() - bd.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+        if (age < 18) {
+          throw new ValidationError('Vertragspartner muss volljährig sein', { family_id: ['Vertragspartner ist nicht volljährig'] });
+        }
+      }
+    }
+    // Auto-resolve member_id: use contract partner's member_id, or first family member
+    if (!resolvedMemberId) {
+      resolvedMemberId = (family as any).contractPartnerMemberId || fMembers[0]?.userId || '';
+    }
+  }
+  if (!resolvedMemberId) {
+    throw new ValidationError('Mitglied ist erforderlich', { member_id: ['Mitglied ist erforderlich'] });
+  }
+
   // Get price from tarif_pricing if not explicitly set
   let price = data.current_price;
   if (price === undefined && defaults.id) {
@@ -243,11 +321,12 @@ contractRoutes.post('/', async (c) => {
   const newContract = {
     orgId: user.orgId,
     contractNumber,
-    memberId: data.member_id,
+    memberId: resolvedMemberId,
     contractKind: data.contract_kind,
     membershipTypeId: data.membership_type_id || null,
     tarifId: data.tarif_id || null,
     parentContractId: data.parent_contract_id || null,
+    familyId: data.family_id || null,
     groupId: data.group_id || defaults.defaultGroupId || null,
     status: 'ACTIVE' as const,
     startDate: data.start_date,

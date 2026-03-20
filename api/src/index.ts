@@ -6,6 +6,7 @@ import { authMiddleware } from './middleware/auth';
 import { authRoutes } from './routes/auth';
 import { memberRoutes } from './routes/members';
 import { bankAccountRoutes } from './routes/bank-accounts';
+import { guardianRoutes } from './routes/guardians';
 import { roleRoutes } from './routes/roles';
 import { eventRoutes } from './routes/events';
 import { attendanceRoutes } from './routes/attendance';
@@ -20,6 +21,7 @@ import { membershipTypeRoutes } from './routes/membership-types';
 import { tarifRoutes } from './routes/tarifs';
 import { discountGroupRoutes } from './routes/discount-groups';
 import { groupRoutes } from './routes/groups';
+import { familyRoutes } from './routes/families';
 import { billingRoutes } from './routes/billing';
 import { contractSettingsRoutes } from './routes/contract-settings';
 import { selfRegistrationRoutes } from './routes/self-registration';
@@ -57,6 +59,19 @@ app.use('*', cors({
 app.route('/auth', authRoutes);
 app.route('/public/self-registration', selfRegistrationRoutes);
 
+// ─── Public Logo Serving (no auth, served from R2) ──────────────────────────
+app.get('/v1/files/logo/:orgId', async (c) => {
+  const orgId = c.req.param('orgId');
+  const list = await c.env.FILES.list({ prefix: `${orgId}/logo/` });
+  if (list.objects.length === 0) return c.notFound();
+  const obj = await c.env.FILES.get(list.objects[0].key);
+  if (!obj) return c.notFound();
+  const headers = new Headers();
+  headers.set('Content-Type', obj.httpMetadata?.contentType || 'image/png');
+  headers.set('Cache-Control', 'public, max-age=3600');
+  return new Response(obj.body, { headers });
+});
+
 // ─── Health Check ────────────────────────────────────────────────────────────
 app.get('/health', (c) => c.json({ status: 'ok', version: '1.0.0', timestamp: new Date().toISOString() }));
 
@@ -65,6 +80,7 @@ app.use('/v1/*', authMiddleware);
 
 app.route('/v1/members', memberRoutes);
 app.route('/v1/members', bankAccountRoutes);
+app.route('/v1/members', guardianRoutes);
 app.route('/v1/roles', roleRoutes);
 app.route('/v1/events', eventRoutes);
 app.route('/v1/courses', eventRoutes);
@@ -80,6 +96,7 @@ app.route('/v1/membership-types', membershipTypeRoutes);
 app.route('/v1/tarifs', tarifRoutes);
 app.route('/v1/discount-groups', discountGroupRoutes);
 app.route('/v1/groups', groupRoutes);
+app.route('/v1/families', familyRoutes);
 app.route('/v1/billing', billingRoutes);
 app.route('/v1/contract-settings', contractSettingsRoutes);
 app.route('/v1/contract-applications', applicationRoutes);

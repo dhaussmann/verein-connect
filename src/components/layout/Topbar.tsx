@@ -10,6 +10,9 @@ import { Badge } from '@/components/ui/badge';
 import { useState, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { useQuery } from '@tanstack/react-query';
+import { membersApi, eventsApi, contractsApi, familyApi, groupsApi } from '@/lib/api';
+import type { Group } from '@/lib/api';
 
 const breadcrumbMap: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -26,9 +29,68 @@ const breadcrumbMap: Record<string, string> = {
   chat: 'Chat',
   email: 'E-Mail',
   accounting: 'Buchhaltung',
-  roles: 'Rollen',
+  roles: 'Rollen & Berechtigungen',
   fields: 'Profilfelder',
+  users: 'Benutzer',
+  general: 'Allgemein',
+  notifications: 'Benachrichtigungen',
+  integrations: 'Integrationen',
+  gdpr: 'DSGVO & Datenschutz',
+  contracts: 'Verträge',
+  families: 'Familien',
+  groups: 'Gruppen',
+  billing: 'Abrechnung',
+  applications: 'Anträge',
+  portal: 'Mitgliederportal',
+  profile: 'Profil',
+  edit: 'Bearbeiten',
 };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function EntityBreadcrumb({ id, entityType }: { id: string; entityType: string }) {
+  const { data: label } = useQuery({
+    queryKey: ['breadcrumb', entityType, id],
+    queryFn: async () => {
+      switch (entityType) {
+        case 'members': {
+          const m = await membersApi.get(id);
+          return `${m.firstName} ${m.lastName}`;
+        }
+        case 'courses': {
+          const c = await eventsApi.get(id);
+          return (c as any).title || (c as any).name || id;
+        }
+        case 'events': {
+          const e = await eventsApi.get(id);
+          return (e as any).title || (e as any).name || id;
+        }
+        case 'attendance': {
+          const e = await eventsApi.get(id);
+          return (e as any).title || (e as any).name || id;
+        }
+        case 'contracts': {
+          const c = await contractsApi.get(id);
+          return (c as any).typeName || (c as any).name || id;
+        }
+        case 'families': {
+          const f = await familyApi.get(id);
+          return (f as any).name || id;
+        }
+        case 'groups': {
+          const res = await groupsApi.list();
+          const g = res.data.find((grp: Group) => grp.id === id);
+          return g?.name || id;
+        }
+        default:
+          return id;
+      }
+    },
+    staleTime: 5 * 60 * 1000,
+    enabled: !!id && !!entityType,
+  });
+  return <>{label || '…'}</>;
+}
 
 interface TopbarProps {
   onMobileMenuOpen: () => void;
@@ -41,7 +103,6 @@ export function Topbar({ onMobileMenuOpen }: TopbarProps) {
   const [searchOpen, setSearchOpen] = useState(false);
 
   const segments = location.pathname.split('/').filter(Boolean);
-  const crumbs = segments.map((seg) => breadcrumbMap[seg] || seg);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -64,12 +125,19 @@ export function Topbar({ onMobileMenuOpen }: TopbarProps) {
 
         {/* Breadcrumbs */}
         <nav className="hidden sm:flex items-center gap-1 text-sm text-muted-foreground">
-          {crumbs.map((crumb, i) => (
-            <span key={i} className="flex items-center gap-1">
-              {i > 0 && <ChevronRight className="h-3 w-3" />}
-              <span className={i === crumbs.length - 1 ? 'text-foreground font-medium' : ''}>{crumb}</span>
-            </span>
-          ))}
+          {segments.map((seg, i) => {
+            const isUuid = UUID_RE.test(seg);
+            const label = breadcrumbMap[seg];
+            const parentSeg = i > 0 ? segments[i - 1] : '';
+            return (
+              <span key={i} className="flex items-center gap-1">
+                {i > 0 && <ChevronRight className="h-3 w-3" />}
+                <span className={i === segments.length - 1 ? 'text-foreground font-medium' : ''}>
+                  {isUuid ? <EntityBreadcrumb id={seg} entityType={parentSeg} /> : (label || seg)}
+                </span>
+              </span>
+            );
+          })}
         </nav>
 
         {/* Search */}

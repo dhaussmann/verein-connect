@@ -186,6 +186,38 @@ export default function ContractDetail() {
             </Card>
           </div>
 
+          {/* Familienmitglieder (for Familientarif) */}
+          {contract.familyMembers && contract.familyMembers.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Familienmitglieder{contract.familyName ? ` – ${contract.familyName}` : ''}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {contract.familyMembers.map((fm: any) => (
+                    <div key={fm.id} className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/30">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center font-semibold text-primary text-sm">
+                          {(fm.firstName?.[0] || '')}{(fm.lastName?.[0] || '')}
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{fm.firstName} {fm.lastName}</p>
+                          <p className="text-xs text-muted-foreground">{fm.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {fm.relationship && <Badge variant="outline" className="text-xs">{fm.relationship}</Badge>}
+                        <Button variant="ghost" size="sm" onClick={() => navigate(`/members/${fm.id}`)}>
+                          <User className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Child contracts */}
           {contract.children && contract.children.length > 0 && (
             <Card>

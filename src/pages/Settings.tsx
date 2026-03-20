@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,10 +13,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Upload, Copy, GripVertical, Search, Shield, Check, X, Globe, Link2, FileDown, UserPlus, Users } from 'lucide-react';
-import { useMembers, useCreateMember, useRoles, useAssignRole, useRemoveRole, useProfileFields, useAuditLog } from '@/hooks/use-api';
+import { Plus, Edit, Trash2, Upload, Copy, GripVertical, Search, Shield, Check, X, Globe, Link2, FileDown, UserPlus, Users, Lock, AlertCircle } from 'lucide-react';
+import { useMembers, useCreateMember, useRoles, useAssignRole, useRemoveRole, useProfileFields, useAuditLog, useMembershipLevels, useCreateMembershipLevel, useUpdateMembershipLevel, useDeleteMembershipLevel, useUpdateProfileField, useDeleteProfileField, useCreateProfileField, useOrganizationSettings, useUpdateOrganization, useUploadLogo } from '@/hooks/use-api';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import type { Role } from '@/lib/api';
+import type { Role, MembershipLevel } from '@/lib/api';
 
 const permissionCategories = ['Mitglieder', 'Kurse', 'Termine', 'Finanzen', 'Kommunikation', 'Shop', 'Dateien', 'Einstellungen'];
 const permissionActions = ['Lesen', 'Erstellen', 'Bearbeiten', 'Löschen'];
@@ -34,15 +36,35 @@ export default function Settings() {
   const [fieldEditorOpen, setFieldEditorOpen] = useState(false);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [userSearch, setUserSearch] = useState('');
+  const [levelDialogOpen, setLevelDialogOpen] = useState(false);
+  const [editingLevel, setEditingLevel] = useState<MembershipLevel | null>(null);
+  const [levelForm, setLevelForm] = useState({ name: '', description: '', color: '#3b82f6', isDefault: false });
+  const [deleteLevelConfirm, setDeleteLevelConfirm] = useState<MembershipLevel | null>(null);
+  const [deleteFieldConfirm, setDeleteFieldConfirm] = useState<{ id: string; label: string } | null>(null);
+  const [fieldForm, setFieldForm] = useState({ name: '', label: '', type: 'text', required: false, searchable: true, visibleRegistration: false, gdprDays: 0 });
+  const [orgName, setOrgName] = useState('');
+  const [orgWebsite, setOrgWebsite] = useState('');
 
   // API hooks
   const { data: membersData, isLoading: membersLoading } = useMembers({ per_page: '200' });
   const { data: apiRoles } = useRoles();
   const { data: profileFieldsData } = useProfileFields();
   const { data: auditLogData } = useAuditLog({ per_page: '50' });
+  const { data: levelsData } = useMembershipLevels();
+  const { data: orgData } = useOrganizationSettings();
   const createMember = useCreateMember();
   const assignRole = useAssignRole();
   const removeRole = useRemoveRole();
+  const createLevel = useCreateMembershipLevel();
+  const updateLevel = useUpdateMembershipLevel();
+  const deleteLevel = useDeleteMembershipLevel();
+  const updateProfileField = useUpdateProfileField();
+  const deleteProfileField = useDeleteProfileField();
+  const createProfileField = useCreateProfileField();
+  const updateOrganization = useUpdateOrganization();
+  const uploadLogo = useUploadLogo();
+
+  const membershipLevels: MembershipLevel[] = levelsData?.data ?? [];
 
   const roles: Role[] = apiRoles ?? [];
   const fieldDefinitions: any[] = Array.isArray(profileFieldsData) ? profileFieldsData : (profileFieldsData as any)?.data ?? [];
@@ -102,25 +124,116 @@ export default function Settings() {
     setRoleEditorOpen(true);
   };
 
+  const openLevelEditor = (level?: MembershipLevel) => {
+    setEditingLevel(level || null);
+    setLevelForm(level ? { name: level.name, description: level.description || '', color: level.color, isDefault: level.isDefault } : { name: '', description: '', color: '#3b82f6', isDefault: false });
+    setLevelDialogOpen(true);
+  };
+
+  const handleSaveLevel = async () => {
+    try {
+      if (editingLevel) {
+        await updateLevel.mutateAsync({ id: editingLevel.id, name: levelForm.name, description: levelForm.description, color: levelForm.color, is_default: levelForm.isDefault });
+        toast.success('Level aktualisiert');
+      } else {
+        await createLevel.mutateAsync({ name: levelForm.name, description: levelForm.description, color: levelForm.color, is_default: levelForm.isDefault });
+        toast.success('Level erstellt');
+      }
+      setLevelDialogOpen(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Fehler beim Speichern');
+    }
+  };
+
+  const handleConfirmDeleteLevel = async () => {
+    if (!deleteLevelConfirm) return;
+    try {
+      await deleteLevel.mutateAsync(deleteLevelConfirm.id);
+      toast.success(`Level "${deleteLevelConfirm.name}" gelöscht`);
+      setDeleteLevelConfirm(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Fehler beim Löschen');
+    }
+  };
+
+  const handleToggleFieldProp = async (fieldId: string, prop: string, currentValue: boolean) => {
+    try {
+      await updateProfileField.mutateAsync({ id: fieldId, [prop]: !currentValue });
+    } catch (err: any) {
+      toast.error(err.message || 'Fehler beim Aktualisieren');
+    }
+  };
+
+  const handleConfirmDeleteField = async () => {
+    if (!deleteFieldConfirm) return;
+    try {
+      await deleteProfileField.mutateAsync(deleteFieldConfirm.id);
+      toast.success(`Feld "${deleteFieldConfirm.label}" gelöscht`);
+      setDeleteFieldConfirm(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Fehler beim Löschen');
+    }
+  };
+
+  const handleSaveField = async () => {
+    try {
+      await createProfileField.mutateAsync({
+        name: fieldForm.name,
+        label: fieldForm.label,
+        type: fieldForm.type,
+        required: fieldForm.required,
+        searchable: fieldForm.searchable,
+        visible_registration: fieldForm.visibleRegistration,
+        gdpr_retention_days: fieldForm.gdprDays || null,
+      });
+      toast.success('Feld erstellt');
+      setFieldEditorOpen(false);
+      setFieldForm({ name: '', label: '', type: 'text', required: false, searchable: true, visibleRegistration: false, gdprDays: 0 });
+    } catch (err: any) {
+      toast.error(err.message || 'Fehler beim Erstellen');
+    }
+  };
+
+  const handleSaveOrg = async () => {
+    try {
+      await updateOrganization.mutateAsync({ name: orgName });
+      toast.success('Vereinsdaten gespeichert');
+    } catch (err: any) {
+      toast.error(err.message || 'Fehler beim Speichern');
+    }
+  };
+
+  const org = orgData as any;
+  useEffect(() => {
+    if (org?.name && !orgName) setOrgName(org.name);
+  }, [org?.name]);
+
+  const standardFields = [
+    { name: 'firstName', label: 'Vorname', locked: true, required: true, onForm: true, editable: true, visible: true, adminOnly: false },
+    { name: 'lastName', label: 'Nachname', locked: true, required: true, onForm: true, editable: true, visible: true, adminOnly: false },
+    { name: 'email', label: 'E-Mail', locked: true, required: true, onForm: true, editable: true, visible: true, adminOnly: false },
+    { name: 'birthDate', label: 'Geburtsdatum', locked: false, required: false, onForm: true, editable: false, visible: true, adminOnly: false },
+    { name: 'gender', label: 'Geschlecht', locked: false, required: false, onForm: true, editable: false, visible: true, adminOnly: false },
+    { name: 'mobile', label: 'Mobiltelefon', locked: false, required: false, onForm: true, editable: true, visible: true, adminOnly: false },
+    { name: 'street', label: 'Postanschrift', locked: false, required: false, onForm: true, editable: true, visible: false, adminOnly: false },
+    { name: 'zip', label: 'Postleitzahl', locked: false, required: false, onForm: true, editable: true, visible: false, adminOnly: false },
+    { name: 'city', label: 'Ort', locked: false, required: true, onForm: true, editable: true, visible: true, adminOnly: false },
+    { name: 'phone', label: 'Telefon', locked: false, required: false, onForm: false, editable: true, visible: false, adminOnly: false },
+    { name: 'memberNumber', label: 'Mitgliedsnummer', locked: false, required: false, onForm: false, editable: false, visible: true, adminOnly: true },
+  ];
+
+  const location = useLocation();
+  const activeTab = useMemo(() => {
+    const seg = location.pathname.split('/').pop();
+    const validTabs = ['users', 'general', 'roles', 'fields', 'notifications', 'integrations', 'gdpr', 'members'];
+    return validTabs.includes(seg || '') ? seg! : 'general';
+  }, [location.pathname]);
+
   return (
     <div>
       <PageHeader title="Einstellungen" />
 
-      <Tabs defaultValue="general" orientation="vertical" className="flex flex-col md:flex-row gap-6">
-        <TabsList className="flex md:flex-col h-auto md:w-56 bg-transparent gap-1 shrink-0">
-          {[
-            ['users', 'Benutzer'],
-            ['general', 'Allgemein'],
-            ['roles', 'Rollen & Berechtigungen'],
-            ['fields', 'Profilfelder'],
-            ['notifications', 'Benachrichtigungen'],
-            ['integrations', 'Integrationen'],
-            ['gdpr', 'DSGVO & Datenschutz'],
-          ].map(([val, label]) => (
-            <TabsTrigger key={val} value={val} className="justify-start w-full data-[state=active]:bg-accent">{label}</TabsTrigger>
-          ))}
-        </TabsList>
-
+      <Tabs value={activeTab} className="flex flex-col gap-6">
         <div className="flex-1 min-w-0">
           {/* BENUTZER */}
           <TabsContent value="users">
@@ -193,38 +306,135 @@ export default function Settings() {
 
           {/* ALLGEMEIN */}
           <TabsContent value="general">
-            <Card className="border border-border">
-              <CardHeader><CardTitle>Vereinsdaten</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div><label className="text-sm font-medium">Vereinsname</label><Input defaultValue="TSV Beispielverein 1900 e.V." /></div>
-                  <div><label className="text-sm font-medium">Website</label><Input defaultValue="https://www.tsv-beispiel.de" /></div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Logo</label>
-                  <div className="border-2 border-dashed border-border rounded-lg p-6 text-center text-muted-foreground cursor-pointer hover:bg-muted/50">
-                    <Upload className="h-8 w-8 mx-auto mb-2" /><p className="text-sm">Logo hochladen (PNG, SVG, max 2MB)</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div><label className="text-sm font-medium">Zeitzone</label>
-                    <Select defaultValue="europe_berlin"><SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent><SelectItem value="europe_berlin">Europe/Berlin (CET)</SelectItem></SelectContent>
-                    </Select>
-                  </div>
-                  <div><label className="text-sm font-medium">Sprache</label>
-                    <Select defaultValue="de"><SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent><SelectItem value="de">Deutsch</SelectItem><SelectItem value="en">English</SelectItem></SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <Card className="bg-muted/50 border"><CardContent className="p-4 flex items-center justify-between">
-                  <div><p className="font-medium">Pro Plan</p><p className="text-sm text-muted-foreground">Gültig bis 01.01.2027</p></div>
-                  <Badge variant="outline" className="bg-success/10 text-success border-success/30">Aktiv</Badge>
-                </CardContent></Card>
-                <Button>Änderungen speichern</Button>
-              </CardContent>
-            </Card>
+            <Tabs defaultValue="basisdaten">
+              <TabsList className="mb-4">
+                <TabsTrigger value="basisdaten">Basisdaten</TabsTrigger>
+                <TabsTrigger value="vereinsbedingungen">Vereinsbedingungen</TabsTrigger>
+                <TabsTrigger value="kommunikation">Kommunikation</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="basisdaten">
+                <Card className="border border-border">
+                  <CardHeader><CardTitle>Vereinsdaten</CardTitle></CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium block mb-1.5">Vereinsname</label>
+                        <Input value={orgName} onChange={e => setOrgName(e.target.value)} />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium block mb-1.5">Slug</label>
+                        <Input value={org?.slug || ''} disabled className="bg-muted" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Logo</label>
+                      <div className="flex items-center gap-4">
+                        {org?.logoUrl ? (
+                          <img
+                            src={`${import.meta.env.VITE_API_URL || 'https://verein-connect-api.cloudflareone-demo-account.workers.dev'}${org.logoUrl}?t=${Date.now()}`}
+                            alt="Vereinslogo"
+                            className="w-16 h-16 rounded-lg object-contain border"
+                          />
+                        ) : (
+                          <div className="w-16 h-16 rounded-lg border-2 border-dashed border-border flex items-center justify-center text-muted-foreground">
+                            <Upload className="h-6 w-6" />
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <label className="cursor-pointer">
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                if (file.size > 2 * 1024 * 1024) { toast.error('Datei zu groß (max 2MB)'); return; }
+                                try {
+                                  await uploadLogo.mutateAsync(file);
+                                  toast.success('Logo hochgeladen');
+                                } catch (err: any) {
+                                  toast.error(err.message || 'Upload fehlgeschlagen');
+                                }
+                              }}
+                            />
+                            <div className="border-2 border-dashed border-border rounded-lg p-4 text-center text-muted-foreground hover:bg-muted/50 transition-colors">
+                              <p className="text-sm">{uploadLogo.isPending ? 'Wird hochgeladen...' : 'Logo hochladen (PNG, JPG, SVG, max 2MB)'}</p>
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium block mb-1.5">Zeitzone</label>
+                        <Select defaultValue="europe_berlin"><SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="europe_berlin">Europe/Berlin (CET)</SelectItem></SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium block mb-1.5">Sprache</label>
+                        <Select defaultValue="de"><SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="de">Deutsch</SelectItem><SelectItem value="en">English</SelectItem></SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <Card className="bg-muted/50 border"><CardContent className="p-4 flex items-center justify-between">
+                      <div><p className="font-medium">{org?.plan || 'Pro'} Plan</p><p className="text-sm text-muted-foreground">Gültig bis 01.01.2027</p></div>
+                      <Badge variant="outline" className="bg-success/10 text-success border-success/30">Aktiv</Badge>
+                    </CardContent></Card>
+                    <Button onClick={handleSaveOrg} disabled={updateOrganization.isPending}>
+                      {updateOrganization.isPending ? 'Speichert...' : 'Änderungen speichern'}
+                    </Button>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="vereinsbedingungen">
+                <Card className="border border-border">
+                  <CardHeader><CardTitle>Geschäftsbedingungen / Vereinssatzung</CardTitle></CardHeader>
+                  <CardContent className="space-y-4">
+                    <p className="text-sm text-muted-foreground">Hinterlegen Sie hier Ihre Vereinssatzung, AGB oder allgemeine Geschäftsbedingungen. Diese werden bei der Anmeldung neuer Mitglieder angezeigt.</p>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Link zur Satzung (optional)</label>
+                      <Input placeholder="https://www.meinverein.de/satzung" />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Vereinssatzung / AGB</label>
+                      <Textarea rows={12} placeholder="Hier den vollständigen Text der Vereinssatzung oder AGB eingeben..." />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Beitragsordnung</label>
+                      <Textarea rows={8} placeholder="Hier die Beitragsordnung eingeben..." />
+                    </div>
+                    <Button>Speichern</Button>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="kommunikation">
+                <Card className="border border-border">
+                  <CardHeader><CardTitle>Standardnachrichten</CardTitle></CardHeader>
+                  <CardContent className="space-y-4">
+                    <p className="text-sm text-muted-foreground">Konfigurieren Sie hier die Standardnachrichten, die bei verschiedenen Aktionen automatisch versendet werden. Diese Funktion wird in Kürze verfügbar sein.</p>
+                    <div className="grid gap-4">
+                      {['Willkommensnachricht', 'Bestätigung Mitgliedsantrag', 'Kündigungsbestätigung', 'Zahlungserinnerung', 'Termin-Erinnerung'].map(tmpl => (
+                        <Card key={tmpl} className="border border-border">
+                          <CardContent className="p-4 flex items-center justify-between">
+                            <div>
+                              <p className="font-medium text-sm">{tmpl}</p>
+                              <p className="text-xs text-muted-foreground">Noch nicht konfiguriert</p>
+                            </div>
+                            <Button variant="outline" size="sm" disabled>Bearbeiten</Button>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           {/* ROLLEN */}
@@ -316,6 +526,186 @@ export default function Settings() {
                 </TableBody>
               </Table>
             </Card>
+          </TabsContent>
+
+          {/* MITGLIEDER */}
+          <TabsContent value="members">
+            <Tabs defaultValue="levels">
+              <TabsList className="mb-4">
+                <TabsTrigger value="levels">Mitgliedschaftslevel</TabsTrigger>
+                <TabsTrigger value="memberfields">Mitgliedsfelder</TabsTrigger>
+              </TabsList>
+
+              {/* Mitgliedschaftslevel */}
+              <TabsContent value="levels">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h2 className="text-lg font-semibold">Mitgliedschaftslevel</h2>
+                    <p className="text-sm text-muted-foreground">Definieren Sie die verschiedenen Mitgliedschaftsstufen in Ihrem Verein.</p>
+                  </div>
+                  <Button onClick={() => openLevelEditor()}><Plus className="h-4 w-4 mr-2" /> Neues Level</Button>
+                </div>
+                <Card className="border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Farbe</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Beschreibung</TableHead>
+                        <TableHead className="text-center">Mitglieder</TableHead>
+                        <TableHead className="text-center">Standard</TableHead>
+                        <TableHead className="w-24"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {membershipLevels.map((level, i) => (
+                        <TableRow key={level.id} className={i % 2 === 1 ? 'bg-muted/50' : ''}>
+                          <TableCell>
+                            <div className="w-6 h-6 rounded-full border border-border" style={{ backgroundColor: level.color }} />
+                          </TableCell>
+                          <TableCell className="font-medium">{level.name}</TableCell>
+                          <TableCell className="text-muted-foreground text-sm">{level.description || '–'}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="secondary">{level.memberCount}</Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {level.isDefault ? <Check className="h-4 w-4 text-success mx-auto" /> : <span className="text-muted-foreground">–</span>}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openLevelEditor(level)}><Edit className="h-3.5 w-3.5" /></Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteLevelConfirm(level)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {membershipLevels.length === 0 && (
+                        <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Keine Mitgliedschaftslevel vorhanden.</TableCell></TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </Card>
+              </TabsContent>
+
+              {/* Mitgliedsfelder */}
+              <TabsContent value="memberfields">
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 mb-6 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+                  <p className="text-sm text-blue-800">Hier können die im Verein verwendeten Mitgliedsfelder definiert werden. Für Felder kann eingestellt werden, ob diese bei der Neuanmeldung von Mitglieder erforderlich sind.</p>
+                </div>
+
+                <h3 className="text-base font-semibold mb-3">Standardfelder</h3>
+                <p className="text-sm text-muted-foreground mb-4">Definiere die in der Mitgliederliste zu verwendenden Felder einschließlich ihrer Statusalternativen.</p>
+                <Card className="border border-border mb-8">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="min-w-[140px]">Feld</TableHead>
+                          <TableHead className="text-center text-xs min-w-[100px]">Erforderliches Feld</TableHead>
+                          <TableHead className="text-center text-xs min-w-[120px]">Auf dem Anmeldeformular</TableHead>
+                          <TableHead className="text-center text-xs min-w-[120px]">Von Mitgliedern bearbeitbar</TableHead>
+                          <TableHead className="text-center text-xs min-w-[110px]">Für Mitglieder sichtbar</TableHead>
+                          <TableHead className="text-center text-xs min-w-[140px]">Nur für Vereinsverantwortliche</TableHead>
+                          <TableHead className="text-center text-xs min-w-[100px]">Nicht in Verwendung</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {standardFields.map((field, i) => (
+                          <TableRow key={field.name} className={i % 2 === 1 ? 'bg-muted/50' : ''}>
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-1.5">
+                                {field.locked && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
+                                {field.label}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {field.required ? <Check className="h-4 w-4 text-success mx-auto" /> : <span className="text-muted-foreground">–</span>}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {field.onForm ? <Check className="h-4 w-4 text-success mx-auto" /> : <span className="text-muted-foreground">–</span>}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {field.editable ? <Check className="h-4 w-4 text-success mx-auto" /> : <span className="text-muted-foreground">–</span>}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {field.visible ? <Check className="h-4 w-4 text-success mx-auto" /> : <span className="text-muted-foreground">–</span>}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {field.adminOnly ? <Check className="h-4 w-4 text-success mx-auto" /> : <span className="text-muted-foreground">–</span>}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {!field.required && !field.onForm && !field.editable && !field.visible && !field.adminOnly
+                                ? <X className="h-4 w-4 text-destructive mx-auto" />
+                                : <span className="text-muted-foreground">–</span>}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </Card>
+
+                <div className="flex justify-between items-center mb-3">
+                  <div>
+                    <h3 className="text-base font-semibold">Zusatzfelder</h3>
+                    <p className="text-sm text-muted-foreground">Du kannst eigene Zusatzfelder nach dem Bedarf des Vereins erstellen.</p>
+                  </div>
+                  <Button onClick={() => setFieldEditorOpen(true)} variant="outline" size="sm"><Plus className="h-4 w-4 mr-2" /> Neues Zusatzfeld</Button>
+                </div>
+                <Card className="border border-border">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="min-w-[140px]">Feld</TableHead>
+                          <TableHead className="text-center text-xs min-w-[100px]">Erforderliches Feld</TableHead>
+                          <TableHead className="text-center text-xs min-w-[120px]">Auf dem Anmeldeformular</TableHead>
+                          <TableHead className="text-center text-xs min-w-[120px]">Von Mitgliedern bearbeitbar</TableHead>
+                          <TableHead className="text-center text-xs min-w-[110px]">Für Mitglieder sichtbar</TableHead>
+                          <TableHead className="text-center text-xs min-w-[140px]">Nur für Vereinsverantwortliche</TableHead>
+                          <TableHead className="text-center text-xs min-w-[100px]">Nicht in Verwendung</TableHead>
+                          <TableHead className="w-20"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {fieldDefinitions.map((f: any, i: number) => (
+                          <TableRow key={f.id || i} className={i % 2 === 1 ? 'bg-muted/50' : ''}>
+                            <TableCell className="font-medium text-primary">{f.label || f.display_name || f.name}</TableCell>
+                            <TableCell className="text-center">
+                              <Checkbox checked={!!f.required} onCheckedChange={() => handleToggleFieldProp(f.id, 'required', !!f.required)} />
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Checkbox checked={!!f.onRegistrationForm} onCheckedChange={() => handleToggleFieldProp(f.id, 'on_registration_form', !!f.onRegistrationForm)} />
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Checkbox checked={!!f.editableByMember} onCheckedChange={() => handleToggleFieldProp(f.id, 'editable_by_member', !!f.editableByMember)} />
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Checkbox checked={!!f.visibleToMember} onCheckedChange={() => handleToggleFieldProp(f.id, 'visible_to_member', !!f.visibleToMember)} />
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Checkbox checked={!!f.adminOnly} onCheckedChange={() => handleToggleFieldProp(f.id, 'admin_only', !!f.adminOnly)} />
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {!f.required && !f.onRegistrationForm && !f.editableByMember && !f.visibleToMember && !f.adminOnly
+                                ? <Badge variant="outline" className="text-xs text-muted-foreground">Inaktiv</Badge>
+                                : <span className="text-muted-foreground">–</span>}
+                            </TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteFieldConfirm({ id: f.id, label: f.label || f.name })}><Trash2 className="h-3.5 w-3.5" /></Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {fieldDefinitions.length === 0 && (
+                          <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Keine Zusatzfelder vorhanden.</TableCell></TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </Card>
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           {/* BENACHRICHTIGUNGEN */}
@@ -539,14 +929,22 @@ export default function Settings() {
       </Dialog>
 
       {/* Field Editor Dialog */}
-      <Dialog open={fieldEditorOpen} onOpenChange={setFieldEditorOpen}>
+      <Dialog open={fieldEditorOpen} onOpenChange={(open) => { setFieldEditorOpen(open); if (!open) setFieldForm({ name: '', label: '', type: 'text', required: false, searchable: true, visibleRegistration: false, gdprDays: 0 }); }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Neues Profilfeld</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Neues Zusatzfeld</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div><label className="text-sm font-medium">Interner Name</label><Input placeholder="z.B. shoeSize" /></div>
-            <div><label className="text-sm font-medium">Anzeigename</label><Input placeholder="z.B. Schuhgröße" /></div>
-            <div><label className="text-sm font-medium">Feldtyp</label>
-              <Select><SelectTrigger><SelectValue placeholder="Typ wählen" /></SelectTrigger>
+            <div>
+              <label className="text-sm font-medium block mb-1.5">Interner Name *</label>
+              <Input value={fieldForm.name} onChange={e => setFieldForm(f => ({ ...f, name: e.target.value }))} placeholder="z.B. shoeSize" />
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-1.5">Anzeigename *</label>
+              <Input value={fieldForm.label} onChange={e => setFieldForm(f => ({ ...f, label: e.target.value }))} placeholder="z.B. Schuhgröße" />
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-1.5">Feldtyp</label>
+              <Select value={fieldForm.type} onValueChange={v => setFieldForm(f => ({ ...f, type: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="text">Text</SelectItem>
                   <SelectItem value="number">Zahl</SelectItem>
@@ -557,14 +955,108 @@ export default function Settings() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-center justify-between"><label className="text-sm font-medium">Pflichtfeld</label><Switch /></div>
-            <div className="flex items-center justify-between"><label className="text-sm font-medium">Durchsuchbar</label><Switch /></div>
-            <div className="flex items-center justify-between"><label className="text-sm font-medium">Im Anmeldeformular anzeigen</label><Switch /></div>
-            <div><label className="text-sm font-medium">DSGVO Auto-Löschung (Tage, 0=nie)</label><Input type="number" defaultValue={0} /></div>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">Pflichtfeld</label>
+              <Switch checked={fieldForm.required} onCheckedChange={v => setFieldForm(f => ({ ...f, required: v }))} />
+            </div>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">Durchsuchbar</label>
+              <Switch checked={fieldForm.searchable} onCheckedChange={v => setFieldForm(f => ({ ...f, searchable: v }))} />
+            </div>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">Im Anmeldeformular anzeigen</label>
+              <Switch checked={fieldForm.visibleRegistration} onCheckedChange={v => setFieldForm(f => ({ ...f, visibleRegistration: v }))} />
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-1.5">DSGVO Auto-Löschung (Tage, 0=nie)</label>
+              <Input type="number" value={fieldForm.gdprDays} onChange={e => setFieldForm(f => ({ ...f, gdprDays: parseInt(e.target.value) || 0 }))} />
+            </div>
           </div>
-          <DialogFooter><Button variant="ghost" onClick={() => setFieldEditorOpen(false)}>Abbrechen</Button><Button>Speichern</Button></DialogFooter>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setFieldEditorOpen(false)}>Abbrechen</Button>
+            <Button onClick={handleSaveField} disabled={!fieldForm.name || !fieldForm.label || createProfileField.isPending}>
+              {createProfileField.isPending ? 'Speichert...' : 'Speichern'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Membership Level Editor Dialog */}
+      <Dialog open={levelDialogOpen} onOpenChange={setLevelDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>{editingLevel ? `Level bearbeiten: ${editingLevel.name}` : 'Neues Mitgliedschaftslevel'}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium block mb-1.5">Name *</label>
+              <Input value={levelForm.name} onChange={e => setLevelForm(f => ({ ...f, name: e.target.value }))} placeholder="z.B. Ehrenmitglied" />
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-1.5">Beschreibung</label>
+              <Input value={levelForm.description} onChange={e => setLevelForm(f => ({ ...f, description: e.target.value }))} placeholder="Kurze Beschreibung" />
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-1.5">Farbe</label>
+              <div className="flex items-center gap-3">
+                <input type="color" value={levelForm.color} onChange={e => setLevelForm(f => ({ ...f, color: e.target.value }))} className="w-10 h-10 rounded border border-border cursor-pointer" />
+                <Input value={levelForm.color} onChange={e => setLevelForm(f => ({ ...f, color: e.target.value }))} className="w-32 font-mono text-sm" />
+                <div className="w-6 h-6 rounded-full border border-border" style={{ backgroundColor: levelForm.color }} />
+              </div>
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t">
+              <div>
+                <label className="text-sm font-medium">Standardlevel</label>
+                <p className="text-xs text-muted-foreground">Wird neuen Mitgliedern automatisch zugewiesen</p>
+              </div>
+              <Switch checked={levelForm.isDefault} onCheckedChange={v => setLevelForm(f => ({ ...f, isDefault: v }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setLevelDialogOpen(false)}>Abbrechen</Button>
+            <Button onClick={handleSaveLevel} disabled={!levelForm.name || createLevel.isPending || updateLevel.isPending}>
+              {createLevel.isPending || updateLevel.isPending ? 'Speichert...' : 'Speichern'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Level Confirmation */}
+      <AlertDialog open={!!deleteLevelConfirm} onOpenChange={open => !open && setDeleteLevelConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Level löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Möchten Sie das Level <strong>"{deleteLevelConfirm?.name}"</strong> wirklich löschen?
+              {(deleteLevelConfirm?.memberCount ?? 0) > 0 && (
+                <> Es sind noch <strong>{deleteLevelConfirm?.memberCount} Mitglieder</strong> diesem Level zugeordnet. Die Zuordnung wird entfernt.</>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDeleteLevel} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleteLevel.isPending ? 'Löscht...' : 'Löschen'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Field Confirmation */}
+      <AlertDialog open={!!deleteFieldConfirm} onOpenChange={open => !open && setDeleteFieldConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Zusatzfeld löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Möchten Sie das Feld <strong>"{deleteFieldConfirm?.label}"</strong> wirklich löschen? Alle gespeicherten Werte für dieses Feld gehen verloren.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDeleteField} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleteProfileField.isPending ? 'Löscht...' : 'Löschen'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

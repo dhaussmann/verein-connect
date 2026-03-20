@@ -205,11 +205,11 @@ export default function Contracts() {
                         <td className="p-3">
                           <div className="flex items-center gap-2">
                             <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">
-                              {c.memberInitials}
+                              {c.familyName ? c.familyName.charAt(0).toUpperCase() : c.memberInitials}
                             </div>
                             <div>
-                              <p className="font-medium text-sm">{c.memberName}</p>
-                              <p className="text-xs text-muted-foreground">{c.memberEmail}</p>
+                              <p className="font-medium text-sm">{c.familyName || c.memberName}</p>
+                              <p className="text-xs text-muted-foreground">{c.familyName ? 'Familientarif' : c.memberEmail}</p>
                             </div>
                           </div>
                         </td>

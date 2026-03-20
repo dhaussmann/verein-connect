@@ -6,15 +6,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { ArrowLeft, Clock, MapPin, Users, Euro, Edit, MoreHorizontal, UserPlus } from 'lucide-react';
-import { useEvent } from '@/hooks/use-api';
+import { ArrowLeft, Clock, MapPin, Users, Euro, Edit, MoreHorizontal, UserPlus, Trash2 } from 'lucide-react';
+import { useEvent, useDeleteEvent } from '@/hooks/use-api';
+import { toast } from 'sonner';
 
 const categoryBgClasses: Record<string, string> = {
   Training: 'bg-primary text-primary-foreground',
-  Wettkampf: 'bg-destructive text-destructive-foreground',
-  Lager: 'bg-success text-success-foreground',
-  Workshop: 'bg-warning text-warning-foreground',
-  Freizeit: 'bg-primary-light text-primary-foreground',
+  Spiel: 'bg-destructive text-destructive-foreground',
+  Event: 'bg-success text-success-foreground',
+  Rookies: 'bg-warning text-warning-foreground',
+  Laufschule: 'bg-primary-light text-primary-foreground',
+  Sonstiges: 'bg-muted text-muted-foreground',
 };
 
 const statusStyles: Record<string, string> = {
@@ -34,14 +36,32 @@ export default function CourseDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { data: course, isLoading, error } = useEvent(id);
+  const deleteEvent = useDeleteEvent();
   const [tab, setTab] = useState('info');
 
+  const handleDelete = async () => {
+    if (!id || deleteEvent.isPending) return;
+    if (!confirm('Training wirklich löschen?')) return;
+    try {
+      await deleteEvent.mutateAsync(id);
+      toast.success('Training gelöscht');
+      navigate('/courses');
+    } catch (err: any) {
+      if (err.status === 404) {
+        toast.success('Training wurde bereits gelöscht');
+        navigate('/courses');
+      } else {
+        toast.error(err.message || 'Fehler beim Löschen');
+      }
+    }
+  };
+
   if (isLoading) {
-    return <div className="text-center py-12 text-muted-foreground">Kurs wird geladen...</div>;
+    return <div className="text-center py-12 text-muted-foreground">Training wird geladen...</div>;
   }
 
   if (error || !course) {
-    return <div className="text-center py-12 text-muted-foreground">Kurs nicht gefunden.</div>;
+    return <div className="text-center py-12 text-muted-foreground">Training nicht gefunden.</div>;
   }
 
   const pct = course.maxParticipants > 0 ? Math.round((course.participants / course.maxParticipants) * 100) : 0;
@@ -50,7 +70,7 @@ export default function CourseDetail() {
   return (
     <div>
       <Button variant="ghost" className="mb-4 text-muted-foreground" onClick={() => navigate('/courses')}>
-        <ArrowLeft className="h-4 w-4 mr-2" />Zurück zu Kurse
+        <ArrowLeft className="h-4 w-4 mr-2" />Zurück zu Training
       </Button>
 
       {/* Hero */}
@@ -65,14 +85,19 @@ export default function CourseDetail() {
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Avatar className="h-8 w-8"><AvatarFallback className="bg-primary-lightest text-primary text-xs">{course.instructorInitials}</AvatarFallback></Avatar>
-                <div><p className="text-sm font-medium text-foreground">{course.instructorName}</p><p className="text-xs">Kursleiter</p></div>
+                <div><p className="text-sm font-medium text-foreground">{course.instructorName}</p><p className="text-xs">Trainer</p></div>
               </div>
               <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1"><Clock className="h-4 w-4" />{course.schedule}</span>
-                <span className="flex items-center gap-1"><MapPin className="h-4 w-4" />{course.location}</span>
+                {(course.timeStart || course.timeEnd) && <span className="flex items-center gap-1"><Clock className="h-4 w-4" />{course.timeStart}{course.timeEnd ? ` – ${course.timeEnd}` : ''}</span>}
+                {course.location && <span className="flex items-center gap-1"><MapPin className="h-4 w-4" />{course.location}</span>}
                 <span className="flex items-center gap-1"><Users className="h-4 w-4" />{course.participants}/{course.maxParticipants}</span>
                 {course.price && <span className="flex items-center gap-1"><Euro className="h-4 w-4" />{course.price},00 €</span>}
               </div>
+              {course.groups?.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {course.groups.map(g => <Badge key={g.id} variant="outline">{g.name}</Badge>)}
+                </div>
+              )}
             </div>
             <div className="flex gap-2 flex-wrap">
               {isFull ? (
@@ -80,12 +105,13 @@ export default function CourseDetail() {
               ) : (
                 <Button><UserPlus className="h-4 w-4 mr-2" />Anmelden</Button>
               )}
-              <Button variant="outline"><Edit className="h-4 w-4 mr-2" />Bearbeiten</Button>
+              <Button variant="outline" onClick={() => navigate(`/courses/${id}/edit`)}><Edit className="h-4 w-4 mr-2" />Bearbeiten</Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild><Button variant="outline" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem>Kurs duplizieren</DropdownMenuItem>
-                  <DropdownMenuItem className="text-destructive">Kurs absagen</DropdownMenuItem>
+                  <DropdownMenuItem>Training duplizieren</DropdownMenuItem>
+                  <DropdownMenuItem className="text-destructive">Training absagen</DropdownMenuItem>
+                  <DropdownMenuItem className="text-destructive" onSelect={(e) => { e.preventDefault(); handleDelete(); }}><Trash2 className="h-4 w-4 mr-2" />Training löschen</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -114,10 +140,16 @@ export default function CourseDetail() {
                 <div className="flex justify-between"><span className="text-muted-foreground">Beginn</span><span className="font-medium">{course.startDate}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Ende</span><span className="font-medium">{course.endDate}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Ort</span><span className="font-medium">{course.location}</span></div>
+                {(course.timeStart || course.timeEnd) && (
+                  <div className="flex justify-between"><span className="text-muted-foreground">Uhrzeit</span><span className="font-medium">{course.timeStart}{course.timeEnd ? ` – ${course.timeEnd}` : ''}</span></div>
+                )}
                 <div className="flex justify-between"><span className="text-muted-foreground">Öffentlich</span><span className="font-medium">{course.isPublic ? 'Ja' : 'Nein'}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Auto-Rechnung</span><span className="font-medium">{course.autoInvoice ? 'Ja' : 'Nein'}</span></div>
-                {course.weekdays && (
+                {course.weekdays?.length > 0 && (
                   <div className="flex justify-between"><span className="text-muted-foreground">Tage</span><span className="font-medium">{course.weekdays.join(', ')}</span></div>
+                )}
+                {course.groups?.length > 0 && (
+                  <div className="flex justify-between"><span className="text-muted-foreground">Mannschaft</span><span className="font-medium">{course.groups.map(g => g.name).join(', ')}</span></div>
                 )}
               </CardContent>
             </Card>
@@ -153,6 +185,7 @@ export default function CourseDetail() {
           </Card>
         </TabsContent>
       </Tabs>
+
     </div>
   );
 }

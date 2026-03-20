@@ -75,7 +75,9 @@ portalRoutes.get('/profile', async (c) => {
       description: r.description || '',
     })),
     customFields,
-    joinDate: user.createdAt ? new Date(user.createdAt).toLocaleDateString('de-DE') : '',
+    joinDate: user.joinDate
+      ? new Date(user.joinDate).toLocaleDateString('de-DE')
+      : user.createdAt ? new Date(user.createdAt).toLocaleDateString('de-DE') : '',
   });
 });
 

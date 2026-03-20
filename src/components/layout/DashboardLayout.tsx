@@ -8,23 +8,24 @@ export function DashboardLayout() {
   const { isAuthenticated, isLoading, user, checkAuth } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated && !user) {
-      checkAuth();
+    if (!authChecked) {
+      checkAuth().finally(() => setAuthChecked(true));
     }
-  }, [isAuthenticated, user, checkAuth]);
+  }, [authChecked, checkAuth]);
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  if (isLoading && !user) {
+  if (!authChecked || (isLoading && !user)) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-muted-foreground">Laden...</div>
       </div>
     );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
   }
 
   return (

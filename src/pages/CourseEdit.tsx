@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,13 +16,17 @@ import { CalendarIcon, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { useMembers, useCreateEvent, useGroups } from '@/hooks/use-api';
+import { useEvent, useUpdateEvent, useMembers, useGroups } from '@/hooks/use-api';
 import { toast } from 'sonner';
 
 const weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
-export default function CourseNew() {
+export default function CourseEdit() {
+  const { id } = useParams();
   const navigate = useNavigate();
+  const { data: course, isLoading } = useEvent(id);
+  const updateEvent = useUpdateEvent();
+
   const [eventType, setEventType] = useState('Einmalig');
   const [costEnabled, setCostEnabled] = useState(false);
   const [waitlistEnabled, setWaitlistEnabled] = useState(true);
@@ -37,15 +41,14 @@ export default function CourseNew() {
     setSelectedDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]);
   };
 
-  const createEvent = useCreateEvent();
   const { data: membersData } = useMembers({ per_page: '200' });
   const trainers = (membersData?.data ?? []).filter(m => m.roles?.includes('Trainer') || m.roles?.includes('trainer'));
   const { data: groupsData } = useGroups();
   const groups = (groupsData as any)?.data ?? groupsData ?? [];
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
 
-  const toggleGroup = (id: string) => {
-    setSelectedGroupIds(prev => prev.includes(id) ? prev.filter(g => g !== id) : [...prev, id]);
+  const toggleGroup = (gid: string) => {
+    setSelectedGroupIds(prev => prev.includes(gid) ? prev.filter(g => g !== gid) : [...prev, gid]);
   };
 
   const [category, setCategory] = useState('Training');
@@ -59,43 +62,82 @@ export default function CourseNew() {
   const [price, setPrice] = useState('');
   const [status, setStatus] = useState('draft');
 
+  // Pre-fill form when course data loads
+  useEffect(() => {
+    if (!course) return;
+    setTitle(course.title || '');
+    setDescription(course.description || '');
+    setLocation(course.location || '');
+    setTimeStart(course.timeStart || '');
+    setTimeEnd(course.timeEnd || '');
+    setMaxParticipants(String(course.maxParticipants || ''));
+    setPrice(String(course.price || ''));
+    setCategory(course.category || 'Training');
+    setIsPublic(!!course.isPublic);
+    setAutoInvoice(!!course.autoInvoice);
+    setCostEnabled(!!(course.price && Number(course.price) > 0));
+    if (course.weekdays?.length) setSelectedDays(course.weekdays);
+    if (course.groupIds?.length) setSelectedGroupIds(course.groupIds);
+    if (course.startDate) {
+      // Handle both YYYY-MM-DD and dd.MM.yyyy
+      const d = course.startDate.includes('-')
+        ? new Date(course.startDate + 'T00:00:00')
+        : (() => { const p = course.startDate.split('.'); return new Date(Number(p[2]), Number(p[1]) - 1, Number(p[0])); })();
+      if (!isNaN(d.getTime())) setStartDate(d);
+    }
+    if (course.endDate) {
+      const d = course.endDate.includes('-')
+        ? new Date(course.endDate + 'T00:00:00')
+        : (() => { const p = course.endDate.split('.'); return new Date(Number(p[2]), Number(p[1]) - 1, Number(p[0])); })();
+      if (!isNaN(d.getTime())) setEndDate(d);
+    }
+    // Map event type
+    if (course.eventType === 'single') setEventType('Einmalig');
+    else if (course.eventType === 'recurring') setEventType('Wiederkehrend');
+    else if (course.eventType === 'course') setEventType('Kurs-Serie');
+    // Map status
+    const statusMap: Record<string, string> = { 'Aktiv': 'active', 'Entwurf': 'draft', 'Abgeschlossen': 'completed', 'Abgesagt': 'cancelled' };
+    setStatus(statusMap[course.status] || course.status || 'draft');
+    // Leaders
+    if (course.leaders?.length) setTrainerId(course.leaders[0].userId);
+  }, [course]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedGroupIds.length === 0) return;
+    if (!id) return;
     try {
       const payload: Record<string, any> = {
         title,
         description,
-        event_type: eventType === 'Einmalig' ? 'single' : eventType === 'Wiederkehrend' ? 'recurring' : 'course',
         location,
         time_start: timeStart,
         time_end: timeEnd,
         max_participants: Number(maxParticipants) || 0,
         auto_invoice: autoInvoice,
         is_public: isPublic,
-        weekdays: selectedDays,
         status,
-        leader_ids: trainerId ? [trainerId] : [],
-        group_ids: selectedGroupIds,
-        category_name: category,
       };
       if (startDate) payload.start_date = startDate.toISOString().slice(0, 10);
       if (endDate) payload.end_date = endDate.toISOString().slice(0, 10);
       if (costEnabled && price) payload.fee_amount = Number(price);
-      await createEvent.mutateAsync(payload as any);
-      toast.success('Training wurde erfolgreich erstellt!');
-      navigate('/courses');
+      await updateEvent.mutateAsync({ id, data: payload as any });
+      toast.success('Training wurde aktualisiert!');
+      navigate(`/courses/${id}`);
     } catch (err: any) {
-      toast.error(err.message || 'Fehler beim Erstellen');
+      toast.error(err.message || 'Fehler beim Speichern');
     }
   };
+
+  if (isLoading) {
+    return <div className="text-center py-12 text-muted-foreground">Training wird geladen...</div>;
+  }
 
   return (
     <div>
       <Button variant="ghost" className="mb-4 text-muted-foreground" onClick={() => navigate(-1)}>
         <ArrowLeft className="h-4 w-4 mr-2" />Zurück
       </Button>
-      <PageHeader title="Neues Training" />
+      <PageHeader title="Training bearbeiten" />
 
       <form onSubmit={handleSubmit}>
         <div className="space-y-6 max-w-3xl">
@@ -283,7 +325,7 @@ export default function CourseNew() {
 
           {/* Section: Mannschaft */}
           <Card>
-            <CardHeader><CardTitle>Mannschaft *</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Mannschaft</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">Wähle mindestens eine Mannschaft aus, für die dieses Training gilt.</p>
               {groups.length === 0 ? (
@@ -307,9 +349,6 @@ export default function CourseNew() {
                   ))}
                 </div>
               )}
-              {selectedGroupIds.length === 0 && (
-                <p className="text-xs text-destructive">Bitte mindestens eine Mannschaft auswählen.</p>
-              )}
             </CardContent>
           </Card>
 
@@ -317,7 +356,7 @@ export default function CourseNew() {
 
           <div className="flex justify-end gap-3 pb-8">
             <Button type="button" variant="ghost" onClick={() => navigate(-1)}>Abbrechen</Button>
-            <Button type="submit" disabled={selectedGroupIds.length === 0}>Training erstellen</Button>
+            <Button type="submit" disabled={updateEvent.isPending}>{updateEvent.isPending ? 'Speichern...' : 'Training speichern'}</Button>
           </div>
         </div>
       </form>

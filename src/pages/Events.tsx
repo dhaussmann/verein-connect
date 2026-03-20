@@ -22,14 +22,16 @@ interface CalendarEvent {
   maxParticipants: number;
   status: string;
   description?: string;
+  groups?: { id: string; name: string }[];
 }
 
 const categoryBgClasses: Record<string, string> = {
   Training: 'bg-primary text-primary-foreground',
-  Wettkampf: 'bg-destructive text-destructive-foreground',
-  Lager: 'bg-success text-success-foreground',
-  Workshop: 'bg-warning text-warning-foreground',
-  Freizeit: 'bg-primary-light text-primary-foreground',
+  Spiel: 'bg-destructive text-destructive-foreground',
+  Event: 'bg-success text-success-foreground',
+  Rookies: 'bg-warning text-warning-foreground',
+  Laufschule: 'bg-primary-light text-primary-foreground',
+  Sonstiges: 'bg-muted text-muted-foreground',
 };
 
 const statusBadge: Record<string, string> = {
@@ -106,7 +108,7 @@ export default function Events() {
       map[e.date].push(e);
     });
     return map;
-  }, []);
+  }, [calendarEvents]);
 
   // List view: grouped by week
   const listGroups = useMemo(() => {
@@ -125,7 +127,7 @@ export default function Events() {
       groups[groups.length - 1].events.push(ev);
     });
     return groups;
-  }, []);
+  }, [calendarEvents]);
 
   const isToday = (dateStr: string) => {
     const t = new Date();
@@ -183,6 +185,11 @@ export default function Events() {
                               <p className="flex items-center gap-1"><MapPin className="h-3 w-3" />{ev.location}</p>
                               <p className="flex items-center gap-1"><Users className="h-3 w-3" />{ev.participants}/{ev.maxParticipants}</p>
                             </div>
+                            {ev.groups && ev.groups.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {ev.groups.map(g => <Badge key={g.id} variant="outline" className="text-[10px] px-1 py-0">{g.name}</Badge>)}
+                              </div>
+                            )}
                             <Badge variant="outline" className={`mt-2 text-xs ${statusBadge[ev.status]}`}>{ev.status}</Badge>
                           </PopoverContent>
                         </Popover>
@@ -217,6 +224,7 @@ export default function Events() {
                             <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" />{ev.timeStart}–{ev.timeEnd}</span>
                             <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{ev.location}</span>
                             <Badge variant="outline" className={categoryBgClasses[ev.category] + ' text-xs'}>{ev.category}</Badge>
+                            {ev.groups && ev.groups.length > 0 && ev.groups.map(g => <Badge key={g.id} variant="outline" className="text-xs">{g.name}</Badge>)}
                           </div>
                         </div>
                         <div className="flex items-center gap-3 flex-shrink-0">

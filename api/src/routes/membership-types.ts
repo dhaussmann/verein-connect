@@ -29,6 +29,8 @@ const membershipTypeSchema = z.object({
   cancellation_notice_basis: z.enum(['FROM_CANCELLATION', 'BEFORE_END_OF_PERIOD']).optional(),
   renewal_cancellation_days: z.number().optional(),
   default_group_id: z.string().nullable().optional(),
+  is_family_tarif: z.boolean().optional(),
+  min_family_members: z.number().optional(),
   sort_order: z.number().optional(),
   pricing: z.array(z.object({
     billing_period: z.enum(['MONTHLY', 'QUARTERLY', 'HALF_YEARLY', 'YEARLY']),
@@ -91,6 +93,8 @@ membershipTypeRoutes.post('/', async (c) => {
     cancellationNoticeBasis: data.cancellation_notice_basis || 'FROM_CANCELLATION',
     renewalCancellationDays: data.renewal_cancellation_days || null,
     defaultGroupId: data.default_group_id || null,
+    isFamilyTarif: data.is_family_tarif ? 1 : 0,
+    minFamilyMembers: data.min_family_members ?? 3,
     sortOrder: data.sort_order ?? 0,
   }).returning();
 
@@ -143,6 +147,8 @@ membershipTypeRoutes.put('/:id', async (c) => {
     cancellationNoticeBasis: data.cancellation_notice_basis || 'FROM_CANCELLATION',
     renewalCancellationDays: data.renewal_cancellation_days || null,
     defaultGroupId: data.default_group_id || null,
+    isFamilyTarif: data.is_family_tarif ? 1 : 0,
+    minFamilyMembers: data.min_family_members ?? 3,
     sortOrder: data.sort_order ?? 0,
     updatedAt: new Date().toISOString(),
   }).where(eq(membershipTypes.id, id));

@@ -19,16 +19,16 @@ export default function MyCourses() {
 
   return (
     <div>
-      <PageHeader title="Meine Kurse & Anmeldungen" />
+      <PageHeader title="Mein Training & Anmeldungen" />
 
       {isLoading ? (
-        <div className="text-center py-12 text-muted-foreground">Kurse werden geladen...</div>
+        <div className="text-center py-12 text-muted-foreground">Trainings werden geladen...</div>
       ) : !events || events.length === 0 ? (
         <Card className="border border-border">
           <CardContent className="py-12 text-center">
             <GraduationCap className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">Du bist noch für keinen Kurs angemeldet.</p>
-            <p className="text-sm text-muted-foreground mt-1">Sobald du dich für Kurse oder Termine anmeldest, erscheinen sie hier.</p>
+            <p className="text-muted-foreground">Du bist noch für kein Training angemeldet.</p>
+            <p className="text-sm text-muted-foreground mt-1">Sobald du dich für Trainings oder Termine anmeldest, erscheinen sie hier.</p>
           </CardContent>
         </Card>
       ) : (
@@ -73,7 +73,7 @@ export default function MyCourses() {
                   <div className="flex flex-col items-end gap-1 shrink-0">
                     <Badge variant="outline" className={statusColor(event.status)}>{event.status}</Badge>
                     <Badge variant="secondary" className="text-xs">
-                      {event.eventType === 'course' ? 'Kurs' : event.eventType === 'recurring' ? 'Serie' : 'Einzeltermin'}
+                      {event.eventType === 'course' ? 'Training' : event.eventType === 'recurring' ? 'Serie' : 'Einzeltermin'}
                     </Badge>
                   </div>
                 </div>

@@ -82,7 +82,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(res.status, body.error || body.message || 'Fehler');
+    const msg = body.details ? `${body.error}: ${JSON.stringify(body.details)}` : body.error || body.message || 'Fehler';
+    throw new ApiError(res.status, msg);
   }
 
   if (res.status === 204) return undefined as T;
@@ -174,6 +175,7 @@ export interface Member {
   customFields: Record<string, string>;
   familyId?: string;
   familyRelation?: string;
+  membershipLevels?: { id: string; name: string; color: string }[];
 }
 
 export interface PaginatedResponse<T> {
@@ -226,6 +228,7 @@ export const membersApi = {
         ...(data.city !== undefined && { city: data.city }),
         ...(data.status !== undefined && { status: data.status === 'Aktiv' ? 'active' : data.status === 'Inaktiv' ? 'inactive' : data.status === 'Ausstehend' ? 'pending' : data.status }),
         ...(data.customFields !== undefined && { profile_fields: data.customFields }),
+        ...(data.membershipLevels !== undefined && { membership_level_ids: data.membershipLevels.map(l => l.id) }),
       }),
     }),
 
@@ -275,6 +278,153 @@ export const bankAccountApi = {
 
   delete: (memberId: string) =>
     request<{ success: boolean }>(`/v1/members/${memberId}/bank-account`, {
+      method: 'DELETE',
+    }),
+};
+
+// ─── Guardians (Erziehungsberechtigte) ──────────────────────────────────────
+
+export interface Guardian {
+  id: string;
+  userId: string;
+  firstName: string;
+  lastName: string;
+  street: string | null;
+  zip: string | null;
+  city: string | null;
+  phone: string | null;
+  email: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const guardianApi = {
+  list: (memberId: string) =>
+    request<Guardian[]>(`/v1/members/${memberId}/guardians`),
+
+  create: (memberId: string, data: {
+    first_name: string;
+    last_name: string;
+    street?: string | null;
+    zip?: string | null;
+    city?: string | null;
+    phone?: string | null;
+    email?: string | null;
+  }) =>
+    request<{ id: string; created: boolean }>(`/v1/members/${memberId}/guardians`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  update: (memberId: string, guardianId: string, data: {
+    first_name: string;
+    last_name: string;
+    street?: string | null;
+    zip?: string | null;
+    city?: string | null;
+    phone?: string | null;
+    email?: string | null;
+  }) =>
+    request<{ id: string; updated: boolean }>(`/v1/members/${memberId}/guardians/${guardianId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  delete: (memberId: string, guardianId: string) =>
+    request<{ success: boolean }>(`/v1/members/${memberId}/guardians/${guardianId}`, {
+      method: 'DELETE',
+    }),
+};
+
+// ─── Families (Familienprofile) ──────────────────────────────────────────────
+
+export interface FamilyMember {
+  id: string;
+  userId: string;
+  firstName: string;
+  lastName: string;
+  email?: string;
+  birthDate?: string;
+  relationship?: string;
+}
+
+export interface FamilyProfile {
+  id: string;
+  name: string;
+  contractPartnerFirstName: string | null;
+  contractPartnerLastName: string | null;
+  contractPartnerEmail: string | null;
+  contractPartnerPhone: string | null;
+  contractPartnerStreet: string | null;
+  contractPartnerZip: string | null;
+  contractPartnerCity: string | null;
+  contractPartnerBirthDate: string | null;
+  contractPartnerMemberId: string | null;
+  memberCount: number;
+  members: FamilyMember[];
+  hasActiveContract: boolean;
+  activeContractNumber: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FamilyDetail extends FamilyProfile {
+  contracts: {
+    id: string;
+    contractNumber: string;
+    status: string;
+    currentPrice: number;
+    billingPeriod: string;
+    startDate: string;
+    endDate: string | null;
+  }[];
+}
+
+export type FamilyCreateData = {
+  name: string;
+  contract_partner_first_name: string;
+  contract_partner_last_name: string;
+  contract_partner_email?: string | null;
+  contract_partner_phone?: string | null;
+  contract_partner_street?: string | null;
+  contract_partner_zip?: string | null;
+  contract_partner_city?: string | null;
+  contract_partner_birth_date?: string | null;
+  contract_partner_member_id?: string | null;
+};
+
+export const familyApi = {
+  list: () =>
+    request<FamilyProfile[]>('/v1/families'),
+
+  get: (id: string) =>
+    request<FamilyDetail>(`/v1/families/${id}`),
+
+  create: (data: FamilyCreateData) =>
+    request<{ id: string; created: boolean }>('/v1/families', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  update: (id: string, data: FamilyCreateData) =>
+    request<{ id: string; updated: boolean }>(`/v1/families/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  delete: (id: string) =>
+    request<{ success: boolean }>(`/v1/families/${id}`, {
+      method: 'DELETE',
+    }),
+
+  addMember: (familyId: string, data: { user_id: string; relationship?: string }) =>
+    request<{ id: string; created: boolean }>(`/v1/families/${familyId}/members`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  removeMember: (familyId: string, userId: string) =>
+    request<{ success: boolean }>(`/v1/families/${familyId}/members/${userId}`, {
       method: 'DELETE',
     }),
 };
@@ -350,6 +500,8 @@ export interface Event {
   targetRoles: string[];
   autoInvoice: boolean;
   eventType: string;
+  groupIds: string[];
+  groups: { id: string; name: string }[];
   leaders: { userId: string; name: string; roleLabel: string }[];
 }
 
@@ -366,6 +518,7 @@ export interface CalendarEvent {
   participants: number;
   maxParticipants: number;
   status: string;
+  groups?: { id: string; name: string }[];
 }
 
 export const eventsApi = {
@@ -587,13 +740,31 @@ export const settingsApi = {
       body: JSON.stringify(data),
     }),
 
-  listProfileFields: () => request<unknown[]>('/v1/settings/profile-fields'),
+  uploadLogo: (file: File) => {
+    const fd = new FormData();
+    fd.append('logo', file);
+    return request<{ logoUrl: string }>('/v1/settings/organization/logo', {
+      method: 'POST',
+      body: fd,
+    });
+  },
+
+  listProfileFields: () => request<unknown[]>('/v1/settings/fields'),
 
   createProfileField: (data: Record<string, unknown>) =>
-    request<unknown>('/v1/settings/profile-fields', {
+    request<{ id: string }>('/v1/settings/fields', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  updateProfileField: (id: string, data: Record<string, unknown>) =>
+    request<{ success: boolean }>(`/v1/settings/fields/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteProfileField: (id: string) =>
+    request<{ success: boolean }>(`/v1/settings/fields/${id}`, { method: 'DELETE' }),
 
   listFamilies: () => request<unknown[]>('/v1/settings/families'),
 
@@ -674,6 +845,8 @@ export interface Contract {
   typeName: string;
   groupId: string | null;
   groupName: string;
+  familyId: string | null;
+  familyName: string;
   status: string;
   startDate: string;
   endDate: string | null;
@@ -706,6 +879,8 @@ export interface ContractDetail extends Contract {
     phone: string | null; mobile: string | null;
     street: string | null; zip: string | null; city: string | null;
   } | null;
+  familyMembers: { id: string; firstName: string; lastName: string; email: string; relationship: string }[];
+  familyName: string | null;
   pauses: ContractPause[];
   invoices: any[];
   children: any[];
@@ -741,6 +916,8 @@ export interface MembershipType {
   cancellationNoticeBasis: string;
   renewalCancellationDays: number | null;
   defaultGroupId: string | null;
+  isFamilyTarif: number;
+  minFamilyMembers: number;
   groupName: string;
   sortOrder: number;
   pricing: TarifPricing[];
@@ -776,7 +953,10 @@ export interface Group {
   orgId: string;
   name: string;
   description: string | null;
+  parentGroupId: string | null;
   category: string | null;
+  memberCount: number;
+  childrenCount: number;
   createdAt: string;
 }
 
@@ -940,6 +1120,29 @@ export const selfRegistrationApi = {
       body: JSON.stringify(data),
     }).then(r => r.json());
   },
+};
+
+// ─── Membership Levels ──────────────────────────────────────────────────────
+export interface MembershipLevel {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string;
+  sortOrder: number;
+  isDefault: boolean;
+  memberCount: number;
+}
+
+export const membershipLevelsApi = {
+  list: () => request<{ data: MembershipLevel[] }>('/v1/settings/membership-levels'),
+  create: (data: { name: string; description?: string; color?: string; sort_order?: number; is_default?: boolean }) =>
+    request<{ id: string }>('/v1/settings/membership-levels', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: { name?: string; description?: string; color?: string; sort_order?: number; is_default?: boolean }) =>
+    request<{ success: boolean }>(`/v1/settings/membership-levels/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  delete: (id: string) =>
+    request<{ success: boolean }>(`/v1/settings/membership-levels/${id}`, { method: 'DELETE' }),
+  reorder: (order: string[]) =>
+    request<{ success: boolean }>('/v1/settings/membership-levels/reorder', { method: 'PUT', body: JSON.stringify({ order }) }),
 };
 
 export const portalApi = {

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, count, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Env, AuthUser } from '../types/bindings';
 import { groups, groupMembers, users } from '../db/schema';
@@ -15,6 +15,7 @@ const groupSchema = z.object({
   name: z.string().min(1),
   description: z.string().nullable().optional(),
   category: z.enum(['standard', 'team']).optional(),
+  parent_group_id: z.string().nullable().optional(),
 });
 
 // ─── GET / — List groups ────────────────────────────────────────────────────
@@ -22,7 +23,15 @@ groupRoutes.get('/', async (c) => {
   const user = c.get('user');
   const db = drizzle(c.env.DB);
   const rows = await db.select().from(groups).where(eq(groups.orgId, user.orgId));
-  return c.json({ data: rows });
+
+  // Enrich with member count and children count
+  const enriched = await Promise.all(rows.map(async (g) => {
+    const mc = await db.select({ count: count() }).from(groupMembers).where(eq(groupMembers.groupId, g.id));
+    const cc = await db.select({ count: count() }).from(groups).where(eq(groups.parentGroupId, g.id));
+    return { ...g, memberCount: mc[0]?.count || 0, childrenCount: cc[0]?.count || 0 };
+  }));
+
+  return c.json({ data: enriched });
 });
 
 // ─── POST / — Create group ─────────────────────────────────────────────────
@@ -37,6 +46,7 @@ groupRoutes.post('/', async (c) => {
     orgId: user.orgId,
     name: parsed.data.name,
     description: parsed.data.description || null,
+    parentGroupId: parsed.data.parent_group_id || null,
     category: parsed.data.category || 'standard',
   }).returning();
 
@@ -61,6 +71,7 @@ groupRoutes.put('/:id', async (c) => {
     description: parsed.data.description || null,
   };
   if (parsed.data.category) updateData.category = parsed.data.category;
+  if (parsed.data.parent_group_id !== undefined) updateData.parentGroupId = parsed.data.parent_group_id || null;
   await db.update(groups).set(updateData).where(eq(groups.id, id));
 
   await writeAuditLog(c.env.DB, user.orgId, user.id, `Gruppe '${parsed.data.name}' bearbeitet`, 'group', id);

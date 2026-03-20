@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/d1';
 import { eq, and, desc, gte, lte, count } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Env, AuthUser } from '../types/bindings';
-import { organizations, profileFieldDefinitions, auditLog, users, profileFieldValues, families, familyMembers, savedFilters } from '../db/schema';
+import { organizations, profileFieldDefinitions, auditLog, users, profileFieldValues, families, familyMembers, savedFilters, membershipLevels, userMembershipLevels } from '../db/schema';
 import { parsePagination, buildMeta } from '../lib/pagination';
 import { NotFoundError, ValidationError } from '../lib/errors';
 import { writeAuditLog } from '../lib/audit';
@@ -84,6 +84,10 @@ settingsRoutes.get('/fields', async (c) => {
     required: f.isRequired === 1,
     searchable: f.isSearchable === 1,
     visibleRegistration: f.isVisibleRegistration === 1,
+    onRegistrationForm: f.onRegistrationForm === 1,
+    editableByMember: f.editableByMember === 1,
+    visibleToMember: f.visibleToMember === 1,
+    adminOnly: f.adminOnly === 1,
     sortOrder: f.sortOrder,
     gdprRetentionDays: f.gdprRetentionDays,
   })));
@@ -106,6 +110,10 @@ settingsRoutes.post('/fields', async (c) => {
     isRequired: body.required ? 1 : 0,
     isSearchable: body.searchable !== false ? 1 : 0,
     isVisibleRegistration: body.visible_registration ? 1 : 0,
+    onRegistrationForm: body.on_registration_form ? 1 : 0,
+    editableByMember: body.editable_by_member ? 1 : 0,
+    visibleToMember: body.visible_to_member ? 1 : 0,
+    adminOnly: body.admin_only ? 1 : 0,
     sortOrder: body.sort_order || 0,
     gdprRetentionDays: body.gdpr_retention_days,
   });
@@ -128,6 +136,10 @@ settingsRoutes.patch('/fields/:id', async (c) => {
   if (body.options !== undefined) updateData.options = JSON.stringify(body.options);
   if (body.required !== undefined) updateData.isRequired = body.required ? 1 : 0;
   if (body.searchable !== undefined) updateData.isSearchable = body.searchable ? 1 : 0;
+  if (body.on_registration_form !== undefined) updateData.onRegistrationForm = body.on_registration_form ? 1 : 0;
+  if (body.editable_by_member !== undefined) updateData.editableByMember = body.editable_by_member ? 1 : 0;
+  if (body.visible_to_member !== undefined) updateData.visibleToMember = body.visible_to_member ? 1 : 0;
+  if (body.admin_only !== undefined) updateData.adminOnly = body.admin_only ? 1 : 0;
   if (body.sort_order !== undefined) updateData.sortOrder = body.sort_order;
 
   await db.update(profileFieldDefinitions).set(updateData)
@@ -155,6 +167,106 @@ settingsRoutes.put('/fields/order', async (c) => {
   for (let i = 0; i < order.length; i++) {
     await db.update(profileFieldDefinitions).set({ sortOrder: i })
       .where(and(eq(profileFieldDefinitions.id, order[i]), eq(profileFieldDefinitions.orgId, user.orgId)));
+  }
+
+  return c.json({ success: true });
+});
+
+// ─── Membership Levels ──────────────────────────────────────────────────────
+settingsRoutes.get('/membership-levels', async (c) => {
+  const user = c.get('user');
+  const db = drizzle(c.env.DB);
+
+  const rows = await db.select().from(membershipLevels)
+    .where(eq(membershipLevels.orgId, user.orgId))
+    .orderBy(membershipLevels.sortOrder);
+
+  // Count members per level
+  const enriched = await Promise.all(rows.map(async (level) => {
+    const countResult = await db.select({ count: count() }).from(userMembershipLevels)
+      .innerJoin(users, eq(userMembershipLevels.userId, users.id))
+      .where(and(eq(users.orgId, user.orgId), eq(userMembershipLevels.levelId, level.id)));
+    return {
+      id: level.id,
+      name: level.name,
+      description: level.description,
+      color: level.color,
+      sortOrder: level.sortOrder,
+      isDefault: level.isDefault === 1,
+      memberCount: countResult[0]?.count || 0,
+    };
+  }));
+
+  return c.json({ data: enriched });
+});
+
+settingsRoutes.post('/membership-levels', async (c) => {
+  const user = c.get('user');
+  const db = drizzle(c.env.DB);
+  const body = await c.req.json();
+
+  const id = crypto.randomUUID();
+  await db.insert(membershipLevels).values({
+    id,
+    orgId: user.orgId,
+    name: body.name,
+    description: body.description || null,
+    color: body.color || '#3b82f6',
+    sortOrder: body.sort_order || 0,
+    isDefault: body.is_default ? 1 : 0,
+  });
+
+  await writeAuditLog(c.env.DB, user.orgId, user.id, `Mitgliedschaftslevel '${body.name}' erstellt`, 'membership_level', id);
+  return c.json({ id }, 201);
+});
+
+settingsRoutes.put('/membership-levels/:id', async (c) => {
+  const user = c.get('user');
+  const db = drizzle(c.env.DB);
+  const levelId = c.req.param('id');
+  const body = await c.req.json();
+
+  const existing = await db.select().from(membershipLevels)
+    .where(and(eq(membershipLevels.id, levelId), eq(membershipLevels.orgId, user.orgId)));
+  if (existing.length === 0) throw new NotFoundError('Mitgliedschaftslevel', levelId);
+
+  const updateData: Record<string, any> = {};
+  if (body.name !== undefined) updateData.name = body.name;
+  if (body.description !== undefined) updateData.description = body.description;
+  if (body.color !== undefined) updateData.color = body.color;
+  if (body.sort_order !== undefined) updateData.sortOrder = body.sort_order;
+  if (body.is_default !== undefined) updateData.isDefault = body.is_default ? 1 : 0;
+
+  await db.update(membershipLevels).set(updateData).where(eq(membershipLevels.id, levelId));
+  await writeAuditLog(c.env.DB, user.orgId, user.id, `Mitgliedschaftslevel bearbeitet`, 'membership_level', levelId);
+  return c.json({ success: true });
+});
+
+settingsRoutes.delete('/membership-levels/:id', async (c) => {
+  const user = c.get('user');
+  const db = drizzle(c.env.DB);
+  const levelId = c.req.param('id');
+
+  const existing = await db.select().from(membershipLevels)
+    .where(and(eq(membershipLevels.id, levelId), eq(membershipLevels.orgId, user.orgId)));
+  if (existing.length === 0) throw new NotFoundError('Mitgliedschaftslevel', levelId);
+
+  // Remove all user assignments for this level
+  await db.delete(userMembershipLevels).where(eq(userMembershipLevels.levelId, levelId));
+
+  await db.delete(membershipLevels).where(eq(membershipLevels.id, levelId));
+  await writeAuditLog(c.env.DB, user.orgId, user.id, `Mitgliedschaftslevel '${existing[0].name}' geloescht`, 'membership_level', levelId);
+  return c.json({ success: true });
+});
+
+settingsRoutes.put('/membership-levels/reorder', async (c) => {
+  const user = c.get('user');
+  const db = drizzle(c.env.DB);
+  const { order } = await c.req.json();
+
+  for (let i = 0; i < order.length; i++) {
+    await db.update(membershipLevels).set({ sortOrder: i })
+      .where(and(eq(membershipLevels.id, order[i]), eq(membershipLevels.orgId, user.orgId)));
   }
 
   return c.json({ success: true });

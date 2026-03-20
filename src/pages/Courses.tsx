@@ -15,10 +15,11 @@ import type { Event } from '@/lib/api';
 
 const categoryBgClasses: Record<string, string> = {
   Training: 'bg-primary text-primary-foreground',
-  Wettkampf: 'bg-destructive text-destructive-foreground',
-  Lager: 'bg-success text-success-foreground',
-  Workshop: 'bg-warning text-warning-foreground',
-  Freizeit: 'bg-primary-light text-primary-foreground',
+  Spiel: 'bg-destructive text-destructive-foreground',
+  Event: 'bg-success text-success-foreground',
+  Rookies: 'bg-warning text-warning-foreground',
+  Laufschule: 'bg-primary-light text-primary-foreground',
+  Sonstiges: 'bg-muted text-muted-foreground',
 };
 
 const statusStyles: Record<string, string> = {
@@ -46,7 +47,7 @@ export default function Courses() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [view, setView] = useState<'grid' | 'list'>('grid');
 
-  const { data: eventsData, isLoading, error } = useEvents({ event_type: 'course', per_page: '200' });
+  const { data: eventsData, isLoading, error } = useEvents({ per_page: '200' });
   const courses: Event[] = eventsData?.data ?? [];
 
   const filtered = useMemo(() => {
@@ -61,21 +62,21 @@ export default function Courses() {
   return (
     <div>
       <PageHeader
-        title="Kurse"
-        action={<Button onClick={() => navigate('/courses/new')}><Plus className="h-4 w-4 mr-2" />Neuer Kurs</Button>}
+        title="Training"
+        action={<Button onClick={() => navigate('/courses/new')}><Plus className="h-4 w-4 mr-2" />Neues Training</Button>}
       />
 
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Kurs oder Kursleiter suchen..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <Input placeholder="Training oder Trainer suchen..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
         <Select value={catFilter} onValueChange={setCatFilter}>
           <SelectTrigger className="w-[160px]"><SelectValue placeholder="Kategorie" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Alle Kategorien</SelectItem>
-            {['Training', 'Wettkampf', 'Lager', 'Workshop', 'Freizeit'].map(c => (
+            {['Training', 'Spiel', 'Event', 'Rookies', 'Laufschule', 'Sonstiges'].map(c => (
               <SelectItem key={c} value={c}>{c}</SelectItem>
             ))}
           </SelectContent>
@@ -107,9 +108,9 @@ export default function Courses() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Kurs</TableHead>
+                <TableHead>Training</TableHead>
                 <TableHead>Kategorie</TableHead>
-                <TableHead>Kursleiter</TableHead>
+                <TableHead>Trainer</TableHead>
                 <TableHead>Zeitplan</TableHead>
                 <TableHead>Teilnehmer</TableHead>
                 <TableHead>Status</TableHead>
@@ -134,13 +135,13 @@ export default function Courses() {
       )}
 
       {isLoading && (
-        <div className="text-center py-12 text-muted-foreground">Kurse werden geladen...</div>
+        <div className="text-center py-12 text-muted-foreground">Trainings werden geladen...</div>
       )}
       {error && (
         <div className="text-center py-12 text-destructive">Fehler beim Laden: {error.message}</div>
       )}
       {!isLoading && !error && filtered.length === 0 && (
-        <div className="text-center py-12 text-muted-foreground">Keine Kurse gefunden.</div>
+        <div className="text-center py-12 text-muted-foreground">Keine Trainings gefunden.</div>
       )}
     </div>
   );
@@ -150,10 +151,11 @@ function CourseCard({ course: c, onClick }: { course: Event; onClick: () => void
   const pct = participantPercent(c);
   const catColor = {
     Training: 'bg-primary',
-    Wettkampf: 'bg-destructive',
-    Lager: 'bg-success',
-    Workshop: 'bg-warning',
-    Freizeit: 'bg-primary-light',
+    Spiel: 'bg-destructive',
+    Event: 'bg-success',
+    Rookies: 'bg-warning',
+    Laufschule: 'bg-primary-light',
+    Sonstiges: 'bg-muted',
   }[c.category];
 
   return (
@@ -171,11 +173,16 @@ function CourseCard({ course: c, onClick }: { course: Event; onClick: () => void
           <span>{c.instructorName}</span>
         </div>
         <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
-          <Clock className="h-3.5 w-3.5" /><span>{c.schedule}</span>
+          <Clock className="h-3.5 w-3.5" /><span>{c.timeStart || c.schedule}{c.timeEnd ? ` – ${c.timeEnd}` : ''}</span>
         </div>
-        <div className="flex items-center gap-2 mb-3 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
           <MapPin className="h-3.5 w-3.5" /><span>{c.location}</span>
         </div>
+        {c.groups?.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-3">
+            {c.groups.map(g => <Badge key={g.id} variant="outline" className="text-xs">{g.name}</Badge>)}
+          </div>
+        )}
 
         <div className="mt-auto">
           <div className="flex items-center justify-between text-sm mb-1">

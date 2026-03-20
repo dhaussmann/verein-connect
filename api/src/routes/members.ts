@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, and, like, or, sql, desc, asc, count } from 'drizzle-orm';
+import { eq, and, like, or, sql, desc, asc, count, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { hash } from 'bcryptjs';
 import type { Env, AuthUser } from '../types/bindings';
-import { users, roles, userRoles, profileFieldDefinitions, profileFieldValues, families, familyMembers, groups, groupMembers } from '../db/schema';
+import { users, roles, userRoles, profileFieldDefinitions, profileFieldValues, families, familyMembers, groups, groupMembers, membershipLevels, userMembershipLevels } from '../db/schema';
 import { parsePagination, buildMeta } from '../lib/pagination';
 import { NotFoundError, ValidationError } from '../lib/errors';
 import { writeAuditLog } from '../lib/audit';
@@ -24,6 +24,7 @@ const createMemberSchema = z.object({
   street: z.string().optional(),
   zip: z.string().optional(),
   city: z.string().optional(),
+  join_date: z.string().optional(),
   status: z.enum(['active', 'inactive', 'pending']).optional(),
   password: z.string().min(8).optional(),
   role_ids: z.array(z.string()).optional(),
@@ -78,6 +79,13 @@ async function enrichMember(db: ReturnType<typeof drizzle>, member: any, orgId: 
     .innerJoin(families, eq(familyMembers.familyId, families.id))
     .where(eq(familyMembers.userId, member.id));
 
+  // Membership levels (many-to-many)
+  const userLevels = await db
+    .select({ id: membershipLevels.id, name: membershipLevels.name, color: membershipLevels.color })
+    .from(userMembershipLevels)
+    .innerJoin(membershipLevels, eq(userMembershipLevels.levelId, membershipLevels.id))
+    .where(eq(userMembershipLevels.userId, member.id));
+
   const initials = `${(member.firstName || '')[0] || ''}${(member.lastName || '')[0] || ''}`.toUpperCase();
 
   // Map DB status to frontend status
@@ -99,12 +107,17 @@ async function enrichMember(db: ReturnType<typeof drizzle>, member: any, orgId: 
     status: statusMap[member.status || 'active'] || 'Aktiv',
     roles: memberRoles.map((r) => r.name),
     groups: memberGroups.map((g) => ({ id: g.groupId, name: g.groupName, category: g.category, role: g.memberRole })),
-    joinDate: member.createdAt ? new Date(member.createdAt).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '',
+    joinDate: member.joinDate
+      ? new Date(member.joinDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      : member.createdAt
+        ? new Date(member.createdAt).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        : '',
     avatarInitials: initials,
     avatarUrl: member.avatarUrl,
     customFields,
     familyId: familyRow[0]?.familyId || undefined,
     familyRelation: familyRow[0]?.relationship || undefined,
+    membershipLevels: userLevels.map(l => ({ id: l.id, name: l.name, color: l.color || '#6b7280' })),
   };
 }
 
@@ -235,6 +248,7 @@ memberRoutes.post('/', async (c) => {
       street: data.street || null,
       zip: data.zip || null,
       city: data.city || null,
+      joinDate: data.join_date || null,
       status: data.status || 'active',
       memberNumber,
     });
@@ -266,7 +280,7 @@ memberRoutes.post('/', async (c) => {
 
   await writeAuditLog(c.env.DB, user.orgId, user.id, 'Mitglied erstellt', 'user', memberId, `${data.first_name} ${data.last_name} (${memberNumber})`);
 
-  const enriched = await enrichMember(db, { ...data, id: memberId, orgId: user.orgId, memberNumber, status: data.status || 'active', createdAt: new Date().toISOString(), firstName: data.first_name, lastName: data.last_name }, user.orgId);
+  const enriched = await enrichMember(db, { ...data, id: memberId, orgId: user.orgId, memberNumber, status: data.status || 'active', joinDate: data.join_date || null, createdAt: new Date().toISOString(), firstName: data.first_name, lastName: data.last_name }, user.orgId);
   return c.json(enriched, 201);
 });
 
@@ -294,9 +308,19 @@ memberRoutes.patch('/:id', async (c) => {
   if (body.street !== undefined) updateData.street = body.street;
   if (body.zip !== undefined) updateData.zip = body.zip;
   if (body.city !== undefined) updateData.city = body.city;
+  if (body.join_date !== undefined) updateData.joinDate = body.join_date;
   if (body.status !== undefined) updateData.status = body.status;
 
   await db.update(users).set(updateData).where(eq(users.id, memberId));
+
+  // Update membership levels (many-to-many)
+  if (body.membership_level_ids !== undefined) {
+    await db.delete(userMembershipLevels).where(eq(userMembershipLevels.userId, memberId));
+    const levelIds: string[] = body.membership_level_ids || [];
+    for (const levelId of levelIds) {
+      await db.insert(userMembershipLevels).values({ userId: memberId, levelId });
+    }
+  }
 
   // Update profile fields
   if (body.profile_fields) {
