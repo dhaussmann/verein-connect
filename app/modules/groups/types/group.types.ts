@@ -4,6 +4,17 @@ export type GroupListItem = {
   name: string;
   description: string | null;
   category: string | null;
+  groupType: string | null;
+  ageBand: string | null;
+  genderScope: string | null;
+  season: string | null;
+  league: string | null;
+  location: string | null;
+  trainingFocus: string | null;
+  visibility: string | null;
+  admissionOpen: boolean;
+  maxMembers: number | null;
+  maxGoalies: number | null;
   createdAt: string;
 };
 

@@ -13,6 +13,17 @@ export function toGroupListItem(group: GroupRow): GroupListItem {
     name: group.name,
     description: group.description,
     category: group.category,
+    groupType: group.groupType,
+    ageBand: group.ageBand,
+    genderScope: group.genderScope,
+    season: group.season,
+    league: group.league,
+    location: group.location,
+    trainingFocus: group.trainingFocus,
+    visibility: group.visibility,
+    admissionOpen: group.admissionOpen === 1,
+    maxMembers: group.maxMembers,
+    maxGoalies: group.maxGoalies,
     createdAt: group.createdAt || "",
   };
 }

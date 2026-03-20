@@ -8,6 +8,7 @@ import {
 import { ArrowLeft, Plus, Trash2, Users, Search } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { requireRouteData } from "@/core/runtime/route";
+import { groupMemberRoleOptions, groupTypeOptions } from "@/modules/hockey/hockey-options";
 import { getGroupDetailUseCase } from "@/modules/groups/use-cases/get-group-detail.use-case";
 import { addGroupMemberUseCase } from "@/modules/groups/use-cases/add-group-member.use-case";
 import { removeGroupMemberUseCase } from "@/modules/groups/use-cases/remove-group-member.use-case";
@@ -16,6 +17,8 @@ const categoryLabel: Record<string, string> = {
   standard: "Standard",
   team: "Team / Mannschaft",
 };
+
+const groupTypeLabel = Object.fromEntries(groupTypeOptions.map((option) => [option.value, option.label]));
 
 export async function loader({ request, context, params }: LoaderFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
@@ -36,7 +39,13 @@ export async function action({ request, context, params }: ActionFunctionArgs) {
     if (intent === "add-member") {
       const userId = String(formData.get("userId") || "");
       if (!userId) return { success: false, intent, error: "Mitglied fehlt" };
-      await addGroupMemberUseCase(env, { orgId: user.orgId, actorUserId: user.id, groupId, userId });
+      await addGroupMemberUseCase(env, {
+        orgId: user.orgId,
+        actorUserId: user.id,
+        groupId,
+        userId,
+        role: String(formData.get("groupRole") || "") || "Mitglied",
+      });
       return { success: true, intent };
     }
     if (intent === "remove-member") {
@@ -58,6 +67,7 @@ export default function GroupDetailRoute() {
   const navigation = useNavigation();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState("");
+  const [selectedGroupRole, setSelectedGroupRole] = useState("Spieler");
   const [memberSearch, setMemberSearch] = useState("");
 
   const filteredAvailableMembers = useMemo(() => {
@@ -104,8 +114,11 @@ export default function GroupDetailRoute() {
 
       <Group gap="sm" mb="lg">
         <Badge color={group.category === "team" ? "blue" : "gray"}>
-          {categoryLabel[group.category || "standard"] || group.category}
+          {groupTypeLabel[group.groupType || "standard"] || categoryLabel[group.category || "standard"] || group.category}
         </Badge>
+        {group.ageBand && <Badge variant="outline">{group.ageBand}</Badge>}
+        {group.season && <Badge variant="outline">{group.season}</Badge>}
+        {group.league && <Badge variant="outline">{group.league}</Badge>}
         {group.description && (
           <Text size="sm" c="dimmed">{group.description}</Text>
         )}
@@ -124,6 +137,7 @@ export default function GroupDetailRoute() {
               setAddDialogOpen(true);
               setMemberSearch("");
               setSelectedUserId("");
+              setSelectedGroupRole("Spieler");
             }}
           >
             Mitglied hinzufügen
@@ -141,6 +155,7 @@ export default function GroupDetailRoute() {
                 setAddDialogOpen(true);
                 setMemberSearch("");
                 setSelectedUserId("");
+                setSelectedGroupRole("Spieler");
               }}
             >
               Erstes Mitglied hinzufügen
@@ -151,6 +166,7 @@ export default function GroupDetailRoute() {
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Name</Table.Th>
+                <Table.Th>Funktion</Table.Th>
                 <Table.Th>E-Mail</Table.Th>
                 <Table.Th>Beigetreten</Table.Th>
                 <Table.Th w={40} />
@@ -162,6 +178,7 @@ export default function GroupDetailRoute() {
                   <Table.Td fw={500}>
                     <Link to={`/members/${member.userId}`}>{member.firstName} {member.lastName}</Link>
                   </Table.Td>
+                  <Table.Td><Badge variant="outline">{member.role || "Mitglied"}</Badge></Table.Td>
                   <Table.Td c="dimmed">{member.email}</Table.Td>
                   <Table.Td c="dimmed">
                     {member.joinedAt ? new Date(member.joinedAt).toLocaleDateString("de-DE") : "–"}
@@ -209,6 +226,13 @@ export default function GroupDetailRoute() {
               }
               nothingFoundMessage="Keine verfügbaren Mitglieder gefunden"
               searchable
+            />
+            <Select
+              label="Funktion in der Gruppe"
+              name="groupRole"
+              value={selectedGroupRole}
+              onChange={(value) => setSelectedGroupRole(value ?? "Spieler")}
+              data={groupMemberRoleOptions}
             />
           </Stack>
           <Group justify="flex-end" mt="md">
