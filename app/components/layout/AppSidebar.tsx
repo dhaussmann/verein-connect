@@ -1,4 +1,4 @@
-import { useLocation, useNavigate, useRouteLoaderData, useFetcher } from "react-router";
+import { Link, useLocation, useRouteLoaderData, useFetcher } from "react-router";
 import type { RootLoaderData } from "@/root";
 import {
   LayoutDashboard, Users, UsersRound, GraduationCap, Calendar,
@@ -55,7 +55,6 @@ interface AppSidebarProps {
 
 export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: AppSidebarProps) {
   const location = useLocation();
-  const navigate = useNavigate();
   const { user } = (useRouteLoaderData("root") as RootLoaderData) ?? {};
   const logoutFetcher = useFetcher();
 
@@ -78,11 +77,6 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: A
   const toggleMenu = (path: string) =>
     setOpenMenus(prev => ({ ...prev, [path]: !prev[path] }));
 
-  const handleNav = (path: string) => {
-    navigate(path);
-    onMobileClose();
-  };
-
   const roleLabels: Record<string, string> = {
     admin: 'Administrator',
     trainer: 'Trainer',
@@ -99,7 +93,7 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: A
       return (
         <div key={item.path}>
           <button
-            onClick={() => collapsed ? handleNav(item.path) : toggleMenu(item.path)}
+            onClick={() => toggleMenu(item.path)}
             className={cn(
               'w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors duration-150 relative',
               childActive
@@ -125,19 +119,20 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: A
                 const isChildItemActive = location.pathname === child.path
                   || (location.pathname.startsWith(child.path + '/') && child.path !== '/contracts');
                 return (
-                  <button
+                  <Link
                     key={child.path}
-                    onClick={() => handleNav(child.path)}
+                    to={child.path}
                     className={cn(
                       'w-full flex items-center gap-3 pl-4 pr-4 py-2 text-sm transition-colors duration-150 relative',
                       isChildItemActive
                         ? 'bg-accent text-accent-foreground font-medium'
                         : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                     )}
+                    onClick={onMobileClose}
                   >
                     <child.icon className="h-4 w-4 shrink-0" />
                     <span>{child.title}</span>
-                  </button>
+                  </Link>
                 );
               })}
             </div>
@@ -147,9 +142,10 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: A
     }
 
     return (
-      <button
+      <Link
         key={item.path}
-        onClick={() => handleNav(item.path)}
+        to={item.path}
+        onClick={onMobileClose}
         className={cn(
           'w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors duration-150 relative',
           isActive
@@ -163,7 +159,7 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: A
         )}
         <item.icon className={cn('h-5 w-5 shrink-0', collapsed ? '' : 'ml-1')} />
         {!collapsed && <span>{item.title}</span>}
-      </button>
+      </Link>
     );
   };
 

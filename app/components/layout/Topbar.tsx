@@ -1,5 +1,5 @@
 import { Bell, Menu as MenuIcon, Search, ChevronRight, User, LogOut, Building2 } from 'lucide-react';
-import { useLocation, useNavigate, useRouteLoaderData, useFetcher } from "react-router";
+import { Link, useLocation, useRouteLoaderData, useFetcher } from "react-router";
 import type { RootLoaderData } from "@/root";
 import { ActionIcon, Badge, Menu, Modal, TextInput } from '@mantine/core';
 import { useState, useEffect, useCallback } from 'react';
@@ -26,7 +26,6 @@ interface TopbarProps {
 
 export function Topbar({ onMobileMenuOpen }: TopbarProps) {
   const location = useLocation();
-  const navigate = useNavigate();
   const { user } = (useRouteLoaderData("root") as RootLoaderData) ?? {};
   const logoutFetcher = useFetcher();
   const [searchOpen, setSearchOpen] = useState(false);
@@ -101,7 +100,7 @@ export function Topbar({ onMobileMenuOpen }: TopbarProps) {
             </button>
           </Menu.Target>
           <Menu.Dropdown>
-            <Menu.Item leftSection={<User size={14} />} onClick={() => navigate('/settings')}>
+            <Menu.Item leftSection={<User size={14} />} component={Link} to="/settings">
               Profil
             </Menu.Item>
             <Menu.Item leftSection={<Building2 size={14} />}>
