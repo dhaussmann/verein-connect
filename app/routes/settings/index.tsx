@@ -18,13 +18,9 @@ export async function action({ request, context }: ActionFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
   const formData = await request.formData();
   const name = String(formData.get('name') || '').trim();
-  const timezone = String(formData.get('timezone') || '').trim();
-  const language = String(formData.get('language') || '').trim();
   const website = String(formData.get('website') || '').trim();
   if (!name) return { success: false, error: 'Vereinsname ist erforderlich' };
-  if (!timezone) return { success: false, error: 'Zeitzone ist erforderlich' };
-  if (!language) return { success: false, error: 'Sprache ist erforderlich' };
-  await updateOrganizationSettingsUseCase(env, { orgId: user.orgId, actorUserId: user.id, name, timezone, language, website });
+  await updateOrganizationSettingsUseCase(env, { orgId: user.orgId, actorUserId: user.id, name, website });
   return { success: true };
 }
 
@@ -72,28 +68,16 @@ export default function SettingsIndexRoute() {
                 </Text>
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <TextInput
-                label="Zeitzone"
-                name="timezone"
-                defaultValue={String(settings.timezone || 'Europe/Berlin')}
-              />
-              <TextInput
-                label="Sprache"
-                name="language"
-                defaultValue={String(settings.language || 'de')}
-              />
-            </div>
             <Card bg="gray.0">
               <Group justify="space-between">
                 <div>
-                  <Text fw={500}>{org.plan?.toUpperCase() || 'FREE'} Plan</Text>
+                  <Text fw={500}>Vereinsprofil</Text>
                   <Text size="sm" c="dimmed">
-                    Vereins-Slug: {org.slug}
+                    Diese Instanz ist fest auf einen deutschen Verein ausgelegt.
                   </Text>
                 </div>
                 <Badge variant="outline" color="green">
-                  Aktiv
+                  Deutschland
                 </Badge>
               </Group>
             </Card>

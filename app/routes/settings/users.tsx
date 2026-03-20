@@ -31,16 +31,11 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const search = (url.searchParams.get('search') || '').toLowerCase();
   const [users, roles] = await Promise.all([
-    getSettingsUsersUseCase(env, user.orgId),
+    getSettingsUsersUseCase(env, user.orgId, search),
     getSettingsRolesUseCase(env, user.orgId),
   ]);
   return {
-    users: users.filter(
-      (entry) =>
-        !search
-        || `${entry.firstName} ${entry.lastName}`.toLowerCase().includes(search)
-        || entry.email.toLowerCase().includes(search),
-    ),
+    users,
     roles,
     filters: { search: url.searchParams.get('search') || '' },
   };

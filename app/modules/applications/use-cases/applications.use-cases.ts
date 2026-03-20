@@ -1,13 +1,168 @@
 import bcrypt from "bcryptjs";
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { RouteEnv } from "@/core/runtime/route";
 import { writeAuditLog } from "@/core/lib/audit";
-import { contractApplications, contracts, membershipTypes, tarifs, users } from "@/core/db/schema";
+import {
+  contractApplications,
+  contractSettings,
+  contracts,
+  guardians,
+  groups,
+  membershipTypes,
+  organizations,
+  profileFieldDefinitions,
+  roles,
+  tarifs,
+  users,
+} from "@/core/db/schema";
+import { nextFormattedCounter } from "@/core/db/sequences";
+import { getHockeyAgeBand, getSuggestedGroupIdsForAgeBand } from "@/modules/hockey/age-band";
+import { createMemberUseCase } from "@/modules/members/use-cases/create-member.use-case";
 
-async function nextContractNumber(db: ReturnType<typeof drizzle>, orgId: string) {
-  const rows = await db.select({ count: count() }).from(contracts).where(eq(contracts.orgId, orgId));
-  return `V-${String((rows[0]?.count || 0) + 1).padStart(5, "0")}`;
+async function nextContractNumber(db: D1Database, orgId: string) {
+  return nextFormattedCounter(db, orgId, "contract_number", "V-");
+}
+
+export async function getPublicApplicationFormUseCase(env: RouteEnv, input: { orgSlug: string }) {
+  const db = drizzle(env.DB);
+  const orgRows = await db.select().from(organizations).where(eq(organizations.slug, input.orgSlug));
+  const org = orgRows[0];
+  if (!org) throw new Error("Verein nicht gefunden");
+
+  const settingsRows = await db.select().from(contractSettings).where(eq(contractSettings.orgId, org.id));
+  const settings = settingsRows[0] || null;
+
+  const [membershipTypeRows, tarifRows, groupRows, profileFieldRows] = await Promise.all([
+    db.select().from(membershipTypes).where(and(eq(membershipTypes.orgId, org.id), eq(membershipTypes.isActive, 1), eq(membershipTypes.selfRegistrationEnabled, 1))).orderBy(asc(membershipTypes.sortOrder)),
+    db.select().from(tarifs).where(and(eq(tarifs.orgId, org.id), eq(tarifs.isActive, 1), eq(tarifs.selfRegistrationEnabled, 1))).orderBy(asc(tarifs.sortOrder)),
+    db.select().from(groups).where(and(eq(groups.orgId, org.id), inArray(groups.visibility, ["portal", "public"]), eq(groups.admissionOpen, 1))).orderBy(asc(groups.name)),
+    db.select().from(profileFieldDefinitions).where(eq(profileFieldDefinitions.orgId, org.id)).orderBy(asc(profileFieldDefinitions.sortOrder)),
+  ]);
+
+  const registrationFields = profileFieldRows
+    .filter((field) => field.onRegistrationForm === 1 || field.isVisibleRegistration === 1)
+    .map((field) => ({
+      id: field.id,
+      category: field.category,
+      name: field.fieldName,
+      label: field.fieldLabel,
+      type: field.fieldType,
+      options: field.options ? JSON.parse(field.options) : [],
+      required: field.isRequired === 1,
+    }));
+
+  return {
+    organization: {
+      id: org.id,
+      name: org.name,
+      slug: org.slug,
+      settings: JSON.parse(org.settings || "{}"),
+    },
+    settings,
+    membershipTypes: membershipTypeRows,
+    tarifs: tarifRows,
+    groups: groupRows,
+    profileFields: registrationFields,
+  };
+}
+
+export async function submitPublicApplicationUseCase(
+  env: RouteEnv,
+  input: {
+    orgSlug: string;
+    membershipTypeId?: string | null;
+    tarifId?: string | null;
+    billingPeriod?: string | null;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string | null;
+    address?: string | null;
+    dateOfBirth?: string | null;
+    additionalData?: Record<string, unknown>;
+  },
+) {
+  const db = drizzle(env.DB);
+  const orgRows = await db.select().from(organizations).where(eq(organizations.slug, input.orgSlug));
+  const org = orgRows[0];
+  if (!org) throw new Error("Verein nicht gefunden");
+
+  const settingsRows = await db.select().from(contractSettings).where(eq(contractSettings.orgId, org.id));
+  const settings = settingsRows[0];
+  if (!settings || settings.selfRegistrationEnabled !== 1) {
+    throw new Error("Selbstregistrierung ist derzeit nicht aktiviert");
+  }
+  if (!input.membershipTypeId && !input.tarifId) {
+    throw new Error("Bitte ein Beitrittsmodell wählen");
+  }
+  if (input.membershipTypeId) {
+    const rows = await db
+      .select({ id: membershipTypes.id })
+      .from(membershipTypes)
+      .where(and(
+        eq(membershipTypes.orgId, org.id),
+        eq(membershipTypes.id, input.membershipTypeId),
+        eq(membershipTypes.isActive, 1),
+        eq(membershipTypes.selfRegistrationEnabled, 1),
+      ));
+    if (!rows[0]) throw new Error("Die gewählte Mitgliedschaft ist nicht verfügbar");
+  }
+  if (input.tarifId) {
+    const rows = await db
+      .select({ id: tarifs.id })
+      .from(tarifs)
+      .where(and(
+        eq(tarifs.orgId, org.id),
+        eq(tarifs.id, input.tarifId),
+        eq(tarifs.isActive, 1),
+        eq(tarifs.selfRegistrationEnabled, 1),
+      ));
+    if (!rows[0]) throw new Error("Der gewählte Tarif ist nicht verfügbar");
+  }
+
+  const providedGroupIds = Array.isArray(input.additionalData?.groupIds)
+    ? input.additionalData?.groupIds.map(String).filter(Boolean)
+    : [];
+  const ageBand = getHockeyAgeBand(input.dateOfBirth || null);
+  const suggestedGroupRows = providedGroupIds.length === 0 && ageBand
+    ? await db
+        .select({ id: groups.id, ageBand: groups.ageBand, groupType: groups.groupType })
+        .from(groups)
+        .where(and(eq(groups.orgId, org.id), inArray(groups.visibility, ["portal", "public"]), eq(groups.admissionOpen, 1)))
+    : [];
+  const fallbackGroupIds = providedGroupIds.length === 0
+    ? getSuggestedGroupIdsForAgeBand(suggestedGroupRows, ageBand)
+    : [];
+  const additionalData = {
+    ...(input.additionalData || {}),
+    ageBand,
+    groupIds: providedGroupIds.length > 0 ? providedGroupIds : fallbackGroupIds,
+    autoAssignedGroupIds: fallbackGroupIds,
+  };
+
+  const existingPending = await db
+    .select({ id: contractApplications.id })
+    .from(contractApplications)
+    .where(and(eq(contractApplications.orgId, org.id), eq(contractApplications.email, input.email), eq(contractApplications.status, "PENDING")));
+  if (existingPending[0]) {
+    throw new Error("Für diese E-Mail-Adresse existiert bereits ein offener Antrag");
+  }
+
+  await db.insert(contractApplications).values({
+    orgId: org.id,
+    membershipTypeId: input.membershipTypeId || null,
+    tarifId: input.tarifId || null,
+    billingPeriod: input.billingPeriod || null,
+    firstName: input.firstName,
+    lastName: input.lastName,
+    email: input.email,
+    phone: input.phone || null,
+    address: input.address || null,
+    dateOfBirth: input.dateOfBirth || null,
+    additionalData: JSON.stringify(additionalData),
+    status: "PENDING",
+  });
 }
 
 export async function listApplicationsUseCase(env: RouteEnv, input: { orgId: string; page?: number; perPage?: number; status?: string }) {
@@ -24,33 +179,36 @@ export async function listApplicationsUseCase(env: RouteEnv, input: { orgId: str
     db.select().from(contractApplications).where(whereClause).orderBy(desc(contractApplications.submittedAt)).limit(perPage).offset(offset),
   ]);
 
-  const data = await Promise.all(rows.map(async (application) => {
-    let typeName = "";
-    if (application.membershipTypeId) {
-      const types = await db.select({ name: membershipTypes.name }).from(membershipTypes).where(eq(membershipTypes.id, application.membershipTypeId));
-      typeName = types[0]?.name || "";
-    }
-    if (application.tarifId) {
-      const tarifRows = await db.select({ name: tarifs.name }).from(tarifs).where(eq(tarifs.id, application.tarifId));
-      typeName = tarifRows[0]?.name || "";
-    }
+  const membershipTypeIds = [...new Set(rows.map((application) => application.membershipTypeId).filter((id): id is string => Boolean(id)))];
+  const tarifIds = [...new Set(rows.map((application) => application.tarifId).filter((id): id is string => Boolean(id)))];
+  const reviewerIds = [...new Set(rows.map((application) => application.reviewedBy).filter((id): id is string => Boolean(id)))];
 
-    let reviewerName = "";
-    if (application.reviewedBy) {
-      const reviewer = await db
-        .select({ firstName: users.firstName, lastName: users.lastName })
-        .from(users)
-        .where(eq(users.id, application.reviewedBy));
-      reviewerName = reviewer[0] ? `${reviewer[0].firstName} ${reviewer[0].lastName}` : "";
-    }
+  const [types, tarifRows, reviewers] = await Promise.all([
+    membershipTypeIds.length > 0
+      ? db.select({ id: membershipTypes.id, name: membershipTypes.name }).from(membershipTypes).where(inArray(membershipTypes.id, membershipTypeIds))
+      : Promise.resolve([]),
+    tarifIds.length > 0
+      ? db.select({ id: tarifs.id, name: tarifs.name }).from(tarifs).where(inArray(tarifs.id, tarifIds))
+      : Promise.resolve([]),
+    reviewerIds.length > 0
+      ? db.select({ id: users.id, firstName: users.firstName, lastName: users.lastName }).from(users).where(inArray(users.id, reviewerIds))
+      : Promise.resolve([]),
+  ]);
 
-    return {
-      ...application,
-      additionalData: JSON.parse(application.additionalData || "{}"),
-      status: application.status || "PENDING",
-      typeName,
-      reviewerName,
-    };
+  const typeNames = new Map(types.map((type) => [type.id, type.name]));
+  const tarifNames = new Map(tarifRows.map((tarif) => [tarif.id, tarif.name]));
+  const reviewerNames = new Map(reviewers.map((reviewer) => [reviewer.id, `${reviewer.firstName} ${reviewer.lastName}`]));
+
+  const data = rows.map((application) => ({
+    ...application,
+    additionalData: JSON.parse(application.additionalData || "{}"),
+    status: application.status || "PENDING",
+    typeName: application.tarifId
+      ? tarifNames.get(application.tarifId) || ""
+      : application.membershipTypeId
+        ? typeNames.get(application.membershipTypeId) || ""
+        : "",
+    reviewerName: application.reviewedBy ? reviewerNames.get(application.reviewedBy) || "" : "",
   }));
 
   return {
@@ -75,19 +233,59 @@ export async function acceptApplicationUseCase(env: RouteEnv, input: { orgId: st
   if (application.status !== "PENDING") throw new Error("Antrag wurde bereits bearbeitet");
 
   const tempPassword = await bcrypt.hash("Welcome1!", 12);
-  const memberNumber = `M-${Date.now().toString(36).toUpperCase()}`;
-  const createdUser = await db.insert(users).values({
+  const additionalData = JSON.parse(application.additionalData || "{}") as Record<string, unknown>;
+  const memberRoleRows = await db
+    .select({ id: roles.id })
+    .from(roles)
+    .where(and(eq(roles.orgId, input.orgId), eq(roles.name, "member")));
+  const roleIds = Array.isArray(additionalData.roleIds) ? additionalData.roleIds.map(String) : [];
+  if (memberRoleRows[0]?.id && !roleIds.includes(memberRoleRows[0].id)) {
+    roleIds.unshift(memberRoleRows[0].id);
+  }
+  const groupIds = Array.isArray(additionalData.groupIds) ? additionalData.groupIds.map(String) : [];
+  const groupMemberRole = typeof additionalData.groupMemberRole === "string" ? additionalData.groupMemberRole : "Mitglied";
+  const guardiansData = Array.isArray(additionalData.guardians) ? additionalData.guardians as Array<Record<string, unknown>> : [];
+  const rawProfileFields = additionalData.profileFields;
+  const profileFields = rawProfileFields && typeof rawProfileFields === "object"
+    ? Object.fromEntries(
+        Object.entries(rawProfileFields as Record<string, unknown>)
+          .filter(([, value]) => value !== null && value !== undefined && value !== "")
+          .map(([key, value]) => [key, String(value)]),
+      )
+    : {};
+
+  const memberId = await createMemberUseCase(env, {
     orgId: input.orgId,
-    email: application.email,
-    passwordHash: tempPassword,
+    actorUserId: input.actorUserId,
     firstName: application.firstName,
     lastName: application.lastName,
-    phone: application.phone || null,
-    street: application.address || null,
-    birthDate: application.dateOfBirth || null,
+    email: application.email,
+    phone: application.phone || undefined,
+    birthDate: application.dateOfBirth || undefined,
+    street: application.address || undefined,
     status: "active",
-    memberNumber,
-  }).returning();
+    passwordHash: tempPassword,
+    roleIds,
+    groupAssignments: groupIds.map((groupId) => ({ groupId, role: groupMemberRole })),
+    profileFields,
+  });
+
+  for (const guardian of guardiansData) {
+    const firstName = String(guardian.firstName || "").trim();
+    const lastName = String(guardian.lastName || "").trim();
+    if (!firstName || !lastName) continue;
+    await db.insert(guardians).values({
+      orgId: input.orgId,
+      userId: memberId,
+      firstName,
+      lastName,
+      street: String(guardian.street || "") || null,
+      zip: String(guardian.zip || "") || null,
+      city: String(guardian.city || "") || null,
+      phone: String(guardian.phone || "") || null,
+      email: String(guardian.email || "") || null,
+    });
+  }
 
   let defaults: Record<string, unknown> = {};
   const contractKind = application.membershipTypeId ? "MEMBERSHIP" : "TARIF";
@@ -99,7 +297,7 @@ export async function acceptApplicationUseCase(env: RouteEnv, input: { orgId: st
     defaults = tarifRows[0] || {};
   }
 
-  const contractNumber = await nextContractNumber(db, input.orgId);
+  const contractNumber = await nextContractNumber(env.DB, input.orgId);
   const startDate = new Date().toISOString().slice(0, 10);
   let endDate: string | null = null;
   if (typeof defaults["contractDurationMonths"] === "number") {
@@ -111,11 +309,11 @@ export async function acceptApplicationUseCase(env: RouteEnv, input: { orgId: st
   await db.insert(contracts).values({
     orgId: input.orgId,
     contractNumber,
-    memberId: createdUser[0].id,
+    memberId,
     contractKind,
     membershipTypeId: application.membershipTypeId || null,
     tarifId: application.tarifId || null,
-    groupId: typeof defaults["defaultGroupId"] === "string" ? String(defaults["defaultGroupId"]) : null,
+    groupId: null,
     status: "ACTIVE",
     startDate,
     endDate,
@@ -131,7 +329,7 @@ export async function acceptApplicationUseCase(env: RouteEnv, input: { orgId: st
 
   await db.update(contractApplications).set({
     status: "ACCEPTED",
-    memberId: createdUser[0].id,
+    memberId,
     reviewedBy: input.actorUserId,
     reviewedAt: new Date().toISOString(),
   }).where(eq(contractApplications.id, input.applicationId));

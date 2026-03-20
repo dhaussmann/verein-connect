@@ -7,6 +7,7 @@ import {
   Button,
   Card,
   Checkbox,
+  Switch,
   Group,
   Modal,
   Select,
@@ -18,6 +19,7 @@ import {
 import { Edit, Plus, Trash2 } from 'lucide-react';
 import { z } from 'zod';
 import { requireRouteData } from '@/core/runtime/route';
+import { roleScopeOptions, roleTypeOptions } from '@/modules/hockey/hockey-options';
 import {
   createOrUpdateRoleUseCase,
   deleteRoleUseCase,
@@ -35,10 +37,29 @@ const rolePermissionCategories = [
 
 const rolePermissionActions = ['Lesen', 'Erstellen', 'Bearbeiten', 'Löschen'];
 
+const permissionCategoryMap: Record<string, string> = {
+  Mitglieder: 'members',
+  Kurse: 'courses',
+  Termine: 'events',
+  Finanzen: 'finance',
+  Kommunikation: 'communication',
+  Einstellungen: 'settings',
+};
+
+const permissionActionMap: Record<string, string> = {
+  Lesen: 'read',
+  Erstellen: 'create',
+  Bearbeiten: 'update',
+  Löschen: 'delete',
+};
+
 const roleSchema = z.object({
   name: z.string().trim().min(1, 'Name ist erforderlich'),
   description: z.string().trim().optional(),
-  category: z.enum(['general', 'team', 'department', 'system']),
+  category: z.enum(['general', 'system']),
+  roleType: z.string().trim().min(1, 'Typ ist erforderlich'),
+  scope: z.string().trim().min(1, 'Scope ist erforderlich'),
+  isAssignable: z.boolean(),
 });
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
@@ -59,6 +80,9 @@ export async function action({ request, context }: ActionFunctionArgs) {
         name: formData.get('name'),
         description: formData.get('description'),
         category: formData.get('category'),
+        roleType: formData.get('roleType'),
+        scope: formData.get('scope'),
+        isAssignable: formData.get('isAssignable') === 'on',
       });
       if (!parsed.success) {
         return { success: false, intent, error: parsed.error.issues[0]?.message || 'Bitte Eingaben prüfen' };
@@ -72,6 +96,9 @@ export async function action({ request, context }: ActionFunctionArgs) {
         name: parsed.data.name,
         description: parsed.data.description,
         category: parsed.data.category,
+        roleType: parsed.data.roleType,
+        scope: parsed.data.scope,
+        isAssignable: parsed.data.isAssignable,
         permissions,
       });
       return { success: true, intent, requestId };
@@ -144,6 +171,13 @@ export default function SettingsRolesRoute() {
                 <Group gap="xs" mb={4}>
                   <Text fw={600}>{role.name}</Text>
                   <Badge variant="light">{role.category}</Badge>
+                  <Badge variant="outline" size="xs">{role.roleType}</Badge>
+                  <Badge variant="outline" size="xs">{role.scope}</Badge>
+                  {role.isAssignable && (
+                    <Badge variant="outline" color="green" size="xs">
+                      Zuweisbar
+                    </Badge>
+                  )}
                   {role.isSystem && (
                     <Badge variant="outline" size="xs">
                       System
@@ -219,22 +253,33 @@ export default function SettingsRolesRoute() {
               <Select
                 label="Kategorie"
                 name="category"
-                defaultValue={
-                  editingRole?.category === 'System'
-                    ? 'system'
-                    : editingRole?.category === 'Sport'
-                      ? 'team'
-                      : 'general'
-                }
+                defaultValue={editingRole?.category === 'System' ? 'system' : 'general'}
                 data={[
-                  { value: 'system', label: 'System' },
                   { value: 'general', label: 'Verein' },
-                  { value: 'team', label: 'Sport' },
-                  { value: 'department', label: 'Abteilung' },
+                  { value: 'system', label: 'System' },
                 ]}
               />
             </div>
             <TextInput label="Beschreibung" name="description" defaultValue={editingRole?.description || ''} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <Select
+                label="Rollen-Typ"
+                name="roleType"
+                defaultValue={editingRole?.roleType || 'staff'}
+                data={roleTypeOptions}
+              />
+              <Select
+                label="Gueltigkeit"
+                name="scope"
+                defaultValue={editingRole?.scope || 'club'}
+                data={roleScopeOptions}
+              />
+            </div>
+            <Switch
+              name="isAssignable"
+              label="Kann Mitgliedern direkt zugewiesen werden"
+              defaultChecked={editingRole ? editingRole.isAssignable : true}
+            />
             <div>
               <Text size="sm" fw={500} mb="xs">
                 Berechtigungs-Matrix
@@ -260,7 +305,7 @@ export default function SettingsRolesRoute() {
                           </Text>
                         </Table.Td>
                         {rolePermissionActions.map((permissionAction) => {
-                          const permKey = `${category.toLowerCase()}:${permissionAction.toLowerCase()}`;
+                          const permKey = `${permissionCategoryMap[category]}.${permissionActionMap[permissionAction]}`;
                           return (
                             <Table.Td key={permissionAction} style={{ textAlign: 'center' }}>
                               <Checkbox name="permissions" value={permKey} defaultChecked={editingRole?.permissions.includes(permKey)} />

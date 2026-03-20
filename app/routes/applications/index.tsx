@@ -181,6 +181,13 @@ export default function ApplicationsIndexRoute() {
             {selected.reviewerName && <Row label="Bearbeitet von" value={selected.reviewerName} />}
             {selected.reviewedAt && <Row label="Bearbeitet am" value={new Date(selected.reviewedAt).toLocaleDateString('de-DE')} />}
             {selected.reviewNotes && <Row label="Notizen" value={selected.reviewNotes} />}
+            {Object.entries(selected.additionalData || {}).map(([key, value]) => (
+              <Row
+                key={key}
+                label={key}
+                value={Array.isArray(value) ? value.join(', ') : typeof value === 'object' && value ? JSON.stringify(value) : String(value)}
+              />
+            ))}
           </Stack>
         )}
       </Modal>
