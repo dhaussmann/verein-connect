@@ -7,7 +7,7 @@ import { Plus, Send } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { requireRouteData } from "@/core/runtime/route";
 import { createMessageTemplateUseCase, createMessageUseCase, getMessageTemplatesDataUseCase } from "@/modules/communication/use-cases/communication.use-cases";
-import { CommunicationTabs } from "@/modules/communication/web/CommunicationTabs";
+import { CommunicationTabs } from "@/components/communication/CommunicationTabs";
 
 const placeholderTags = ["{{vorname}}", "{{nachname}}", "{{verein}}", "{{kurs}}", "{{datum}}", "{{uhrzeit}}", "{{betrag}}"];
 

@@ -7,7 +7,7 @@ import { FileDown, Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { requireRouteData } from "@/core/runtime/route";
 import { createAccountingEntryUseCase, getAccountingDataUseCase } from "@/modules/finance/use-cases/finance.use-cases";
-import { FinanceTabs } from "@/modules/finance/web/FinanceTabs";
+import { FinanceTabs } from "@/components/finance/FinanceTabs";
 
 const accountingCategories = ["Mitgliedsbeiträge", "Kursgebühren", "Sponsoring", "Veranstaltungen", "Hallenmiete", "Material", "Versicherung", "Personal", "Sonstiges"];
 

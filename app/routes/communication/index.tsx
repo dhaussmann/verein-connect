@@ -6,7 +6,7 @@ import { Copy, Eye, Mail, MoreHorizontal, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { requireRouteData } from "@/core/runtime/route";
 import { deleteMessageUseCase, duplicateMessageUseCase, getMessagesDataUseCase, sendMessageUseCase } from "@/modules/communication/use-cases/communication.use-cases";
-import { CommunicationTabs } from "@/modules/communication/web/CommunicationTabs";
+import { CommunicationTabs } from "@/components/communication/CommunicationTabs";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);

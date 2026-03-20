@@ -21,7 +21,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { requireRouteData } from "@/core/runtime/route";
 import { deleteInvoiceUseCase, getInvoicesDataUseCase, markInvoicePaidUseCase } from "@/modules/finance/use-cases/finance.use-cases";
 import type { Invoice } from "@/lib/api";
-import { FinanceTabs } from "@/modules/finance/web/FinanceTabs";
+import { FinanceTabs } from "@/components/finance/FinanceTabs";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
