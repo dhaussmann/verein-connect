@@ -1,19 +1,22 @@
-import { useEffect, useEffectEvent, useState } from 'react';
-import { Link, redirect, useFetcher, useLoaderData } from 'react-router';
+import { useState } from 'react';
+import { Link, redirect, useLoaderData } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
   Button, ActionIcon, Badge, Card, Text, Group, Stack,
-  Tabs, Table, TextInput, Select, Modal, Menu, Checkbox,
-  Divider,
+  Tabs, Table, TextInput, Menu,
 } from '@mantine/core';
 import {
   Pencil, MessageSquare, QrCode, MoreHorizontal, UserMinus, Trash2,
-  Link as LinkIcon, FileText, X, Plus, Building2,
+  Link as LinkIcon, FileText, X,
 } from 'lucide-react';
-import { notifications } from '@mantine/notifications';
 import { requireRouteData } from '@/core/runtime/route';
-import { groupMemberRoleOptions, groupTypeOptions } from '@/modules/hockey/hockey-options';
+import { groupTypeOptions } from '@/modules/hockey/hockey-options';
+import { useFetcherNotify } from '@/hooks/use-fetcher-notify';
+import { RoleModal } from '@/components/members/RoleModal';
+import { GroupModal } from '@/components/members/GroupModal';
+import { BankAccountSection } from '@/components/members/BankAccountSection';
+import { GuardianSection } from '@/components/members/GuardianSection';
 import { addGroupMemberUseCase } from '@/modules/groups/use-cases/add-group-member.use-case';
 import { removeGroupMemberUseCase } from '@/modules/groups/use-cases/remove-group-member.use-case';
 import { upsertBankAccountUseCase, deleteBankAccountUseCase } from '@/modules/members/use-cases/bank-account.use-case';
@@ -182,66 +185,20 @@ export async function action({ request, context, params }: ActionFunctionArgs) {
 
 export default function MemberDetail() {
   const { member, contracts, groups, roles, profileFields: profileFieldDefinitions, bankAccount, guardians } = useLoaderData<typeof loader>();
-  const fetcher = useFetcher<typeof action>();
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState<Record<string, string>>({});
-  const [roleModalOpen, setRoleModalOpen] = useState(false);
-  const [selectedRoleId, setSelectedRoleId] = useState('');
-  const [groupModalOpen, setGroupModalOpen] = useState(false);
-  const [selectedGroupId, setSelectedGroupId] = useState('');
-  const [selectedGroupRole, setSelectedGroupRole] = useState('Spieler');
-  const [bankEditing, setBankEditing] = useState(false);
-  const [bankForm, setBankForm] = useState({ accountHolder: '', iban: '', bic: '', bankName: '', sepaMandate: false, sepaMandateDate: '', sepaMandateRef: '' });
-  const [guardianModalOpen, setGuardianModalOpen] = useState(false);
-  const [guardianEditing, setGuardianEditing] = useState<string | null>(null);
-  const [guardianForm, setGuardianForm] = useState({ firstName: '', lastName: '', street: '', zip: '', city: '', phone: '', email: '' });
-  const allRoles = roles;
+
+  const fetcher = useFetcherNotify(
+    {
+      'update-member': 'Mitglied gespeichert',
+      'deactivate-member': 'Mitglied deaktiviert',
+      'remove-group-member': 'Gruppe entfernt',
+    },
+    { onSuccess: (data) => { if (data.intent === 'update-member') setEditing(false); } },
+  );
+
   const customFieldDefs: MemberProfileFieldOption[] = profileFieldDefinitions;
   const joinDateIso = member.joinDate ? member.joinDate.split('.').reverse().join('-') : '';
-
-  const handleFetcherResult = useEffectEvent((data: NonNullable<typeof fetcher.data>) => {
-    if (data.error) {
-      notifications.show({ color: 'red', message: data.error });
-      return;
-    }
-    if (!data.success) return;
-
-    if (data.intent === 'deactivate-member') {
-      notifications.show({ color: 'green', message: 'Mitglied deaktiviert' });
-    } else if (data.intent === 'remove-group-member') {
-      notifications.show({ color: 'green', message: 'Gruppe entfernt' });
-    } else if (data.intent === 'add-group-member') {
-      notifications.show({ color: 'green', message: 'Gruppe zugewiesen' });
-      setGroupModalOpen(false);
-      setSelectedGroupId('');
-    } else if (data.intent === 'assign-role') {
-      notifications.show({ color: 'green', message: 'Rolle zugewiesen' });
-      setRoleModalOpen(false);
-      setSelectedRoleId('');
-    } else if (data.intent === 'delete-bank-account') {
-      notifications.show({ color: 'green', message: 'Kontoverbindung gelöscht' });
-      setBankEditing(false);
-    } else if (data.intent === 'upsert-bank-account') {
-      notifications.show({ color: 'green', message: 'Kontoverbindung gespeichert' });
-      setBankEditing(false);
-    } else if (data.intent === 'update-member') {
-      notifications.show({ color: 'green', message: 'Mitglied gespeichert' });
-      setEditing(false);
-    } else if (data.intent === 'create-guardian' || data.intent === 'update-guardian') {
-      notifications.show({ color: 'green', message: 'Erziehungsberechtigter gespeichert' });
-      setGuardianModalOpen(false);
-    } else if (data.intent === 'delete-guardian') {
-      notifications.show({ color: 'green', message: 'Erziehungsberechtigter gelöscht' });
-    }
-  });
-
-  useEffect(() => {
-    if (!fetcher.data) return;
-    handleFetcherResult(fetcher.data);
-  }, [fetcher.data]);
-
-  const roleAssignments = member.roles.map((r: string) => ({ role: r, startDate: member.joinDate }));
-  const availableRoles = allRoles.filter((role) => role.isAssignable && !member.roles.includes(role.name));
+  const availableRoles = roles.filter((role) => role.isAssignable && !member.roles.includes(role.name));
 
   const profileFieldRows = [
     { label: 'Vorname', value: member.firstName },
@@ -277,24 +234,7 @@ export default function MemberDetail() {
               </Group>
             </div>
             <Group gap="xs" wrap="wrap">
-              <Button variant="outline" size="sm" leftSection={<Pencil size={14} />} onClick={() => {
-                if (!editing) {
-                  setEditForm({
-                    first_name: member.firstName,
-                    last_name: member.lastName,
-                    email: member.email,
-                    phone: member.phone || '',
-                    mobile: member.mobile || '',
-                    birth_date: member.birthDate || '',
-                    join_date: joinDateIso,
-                    gender: member.gender || '',
-                    street: member.street || '',
-                    zip: member.zip || '',
-                    city: member.city || '',
-                  });
-                }
-                setEditing(!editing);
-              }}>
+              <Button variant="outline" size="sm" leftSection={<Pencil size={14} />} onClick={() => setEditing((v) => !v)}>
                 {editing ? 'Abbrechen' : 'Bearbeiten'}
               </Button>
               <Button variant="outline" size="sm" leftSection={<MessageSquare size={14} />}>Nachricht</Button>
@@ -351,46 +291,44 @@ export default function MemberDetail() {
           <Card shadow="sm">
             <Card.Section p="md">
               {editing ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    { label: 'Vorname', key: 'first_name' },
-                    { label: 'Nachname', key: 'last_name' },
-                    { label: 'E-Mail', key: 'email' },
-                    { label: 'Telefon', key: 'phone' },
-                    { label: 'Mobil', key: 'mobile' },
-                    { label: 'Geburtsdatum', key: 'birth_date' },
-                    { label: 'Beitritt', key: 'join_date' },
-                    { label: 'Geschlecht', key: 'gender' },
-                    { label: 'Straße', key: 'street' },
-                    { label: 'PLZ', key: 'zip' },
-                    { label: 'Stadt', key: 'city' },
-                  ].map((f) => (
-                    <TextInput
-                      key={f.key}
-                      label={f.label}
-                      type={f.key === 'join_date' || f.key === 'birth_date' ? 'date' : 'text'}
-                      value={editForm[f.key] ?? ''}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
-                    />
-                  ))}
-                  {customFieldDefs.map((cf) => (
-                    <TextInput
-                      key={cf.name}
-                      label={cf.label}
-                      value={editForm[`pf_${cf.name}`] ?? member.customFields[cf.name] ?? ''}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, [`pf_${cf.name}`]: e.target.value }))}
-                    />
-                  ))}
-                  <div className="md:col-span-2 flex gap-2 pt-2">
-                    <Button
-                      loading={fetcher.state !== 'idle'}
-                      onClick={() => fetcher.submit({ intent: 'update-member', ...editForm }, { method: 'post' })}
-                    >
-                      Speichern
-                    </Button>
-                    <Button variant="outline" onClick={() => setEditing(false)}>Abbrechen</Button>
+                <fetcher.Form method="post">
+                  <input type="hidden" name="intent" value="update-member" />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[
+                      { label: 'Vorname', key: 'first_name', value: member.firstName },
+                      { label: 'Nachname', key: 'last_name', value: member.lastName },
+                      { label: 'E-Mail', key: 'email', value: member.email },
+                      { label: 'Telefon', key: 'phone', value: member.phone ?? '' },
+                      { label: 'Mobil', key: 'mobile', value: member.mobile ?? '' },
+                      { label: 'Geburtsdatum', key: 'birth_date', value: member.birthDate ?? '' },
+                      { label: 'Beitritt', key: 'join_date', value: joinDateIso },
+                      { label: 'Geschlecht', key: 'gender', value: member.gender ?? '' },
+                      { label: 'Straße', key: 'street', value: member.street ?? '' },
+                      { label: 'PLZ', key: 'zip', value: member.zip ?? '' },
+                      { label: 'Stadt', key: 'city', value: member.city ?? '' },
+                    ].map((f) => (
+                      <TextInput
+                        key={f.key}
+                        name={f.key}
+                        label={f.label}
+                        type={f.key === 'join_date' || f.key === 'birth_date' ? 'date' : 'text'}
+                        defaultValue={f.value}
+                      />
+                    ))}
+                    {customFieldDefs.map((cf) => (
+                      <TextInput
+                        key={cf.name}
+                        name={`pf_${cf.name}`}
+                        label={cf.label}
+                        defaultValue={member.customFields[cf.name] ?? ''}
+                      />
+                    ))}
+                    <div className="md:col-span-2 flex gap-2 pt-2">
+                      <Button type="submit" loading={fetcher.state !== 'idle'}>Speichern</Button>
+                      <Button variant="outline" type="button" onClick={() => setEditing(false)}>Abbrechen</Button>
+                    </div>
                   </div>
-                </div>
+                </fetcher.Form>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {profileFieldRows.map((f) => (
@@ -411,7 +349,7 @@ export default function MemberDetail() {
             <Card.Section p="md">
               <Group justify="space-between" mb="xs">
                 <Text fw={600} size="sm">Zugewiesene Rollen</Text>
-                <Button size="xs" onClick={() => setRoleModalOpen(true)}>Rolle zuweisen</Button>
+                <RoleModal availableRoles={availableRoles} />
               </Group>
               <Table>
                 <Table.Thead>
@@ -422,10 +360,10 @@ export default function MemberDetail() {
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {roleAssignments.map((ra) => (
-                    <Table.Tr key={ra.role}>
-                      <Table.Td><Badge variant="default">{ra.role}</Badge></Table.Td>
-                      <Table.Td><Text size="sm" c="dimmed">{ra.startDate}</Text></Table.Td>
+                  {member.roles.map((r: string) => (
+                    <Table.Tr key={r}>
+                      <Table.Td><Badge variant="default">{r}</Badge></Table.Td>
+                      <Table.Td><Text size="sm" c="dimmed">{member.joinDate}</Text></Table.Td>
                       <Table.Td><Text size="sm" c="dimmed">–</Text></Table.Td>
                     </Table.Tr>
                   ))}
@@ -435,9 +373,7 @@ export default function MemberDetail() {
               <div className="mt-6">
                 <Group justify="space-between" mb="xs">
                   <Text size="sm" fw={600}>Teams / Gruppen</Text>
-                  <Button size="xs" variant="outline" leftSection={<Plus size={14} />} onClick={() => setGroupModalOpen(true)}>
-                    Team zuweisen
-                  </Button>
+                  <GroupModal groups={groups} assignedGroupIds={member.groups.map((g) => g.id)} />
                 </Group>
                 {member.groups.length === 0 ? (
                   <Text size="sm" c="dimmed">Keine Teams zugewiesen.</Text>
@@ -551,137 +487,7 @@ export default function MemberDetail() {
 
         {/* Tab: Kontoverbindung */}
         <Tabs.Panel value="kontoverbindung">
-          <Card shadow="sm">
-            <Card.Section p="md">
-              <Group justify="space-between" mb="xs">
-                <Group gap="xs">
-                  <Building2 size={16} />
-                  <Text fw={600} size="sm">Kontoverbindung</Text>
-                </Group>
-                {bankAccount && !bankEditing && (
-                  <Group gap="xs">
-                    <Button size="xs" variant="outline" leftSection={<Pencil size={14} />} onClick={() => {
-                      setBankForm({
-                        accountHolder: bankAccount.accountHolder || '',
-                        iban: bankAccount.iban || '',
-                        bic: bankAccount.bic || '',
-                        bankName: bankAccount.bankName || '',
-                        sepaMandate: !!bankAccount.sepaMandate,
-                        sepaMandateDate: bankAccount.sepaMandateDate || '',
-                        sepaMandateRef: bankAccount.sepaMandateRef || '',
-                      });
-                      setBankEditing(true);
-                    }}>Bearbeiten</Button>
-                    <Button size="xs" color="red" leftSection={<Trash2 size={14} />} onClick={() => {
-                      if (confirm('Kontoverbindung wirklich löschen?')) {
-                        fetcher.submit({ intent: 'delete-bank-account' }, { method: 'post' });
-                      }
-                    }}>Löschen</Button>
-                  </Group>
-                )}
-              </Group>
-
-              {!bankAccount && !bankEditing ? (
-                <Stack align="center" py="xl">
-                  <Text size="sm" c="dimmed">Keine Kontoverbindung hinterlegt.</Text>
-                  <Button variant="outline" leftSection={<Plus size={14} />} onClick={() => {
-                    setBankForm({ accountHolder: `${member.firstName} ${member.lastName}`, iban: '', bic: '', bankName: '', sepaMandate: false, sepaMandateDate: '', sepaMandateRef: '' });
-                    setBankEditing(true);
-                  }}>Kontoverbindung anlegen</Button>
-                </Stack>
-              ) : bankEditing ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <TextInput
-                    label="Kontoinhaber *"
-                    value={bankForm.accountHolder}
-                    onChange={e => setBankForm(f => ({ ...f, accountHolder: e.target.value }))}
-                  />
-                  <TextInput
-                    label="IBAN *"
-                    value={bankForm.iban}
-                    onChange={e => setBankForm(f => ({ ...f, iban: e.target.value.toUpperCase() }))}
-                    placeholder="DE89 3704 0044 0532 0130 00"
-                  />
-                  <TextInput
-                    label="BIC"
-                    value={bankForm.bic}
-                    onChange={e => setBankForm(f => ({ ...f, bic: e.target.value.toUpperCase() }))}
-                  />
-                  <TextInput
-                    label="Bank"
-                    value={bankForm.bankName}
-                    onChange={e => setBankForm(f => ({ ...f, bankName: e.target.value }))}
-                  />
-                  <div className="md:col-span-2">
-                    <Divider my="sm" />
-                    <Text size="sm" fw={500} mb="sm">SEPA-Lastschriftmandat</Text>
-                    <Checkbox
-                      checked={bankForm.sepaMandate}
-                      onChange={(e) => setBankForm(f => ({ ...f, sepaMandate: e.currentTarget.checked }))}
-                      label="SEPA-Lastschriftmandat erteilt"
-                      mb="sm"
-                    />
-                    {bankForm.sepaMandate && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <TextInput
-                          label="Mandatsdatum"
-                          type="date"
-                          value={bankForm.sepaMandateDate}
-                          onChange={e => setBankForm(f => ({ ...f, sepaMandateDate: e.target.value }))}
-                        />
-                        <TextInput
-                          label="Mandatsreferenz"
-                          value={bankForm.sepaMandateRef}
-                          onChange={e => setBankForm(f => ({ ...f, sepaMandateRef: e.target.value }))}
-                          placeholder="z.B. SEPA-001-2026"
-                        />
-                      </div>
-                    )}
-                  </div>
-                  <div className="md:col-span-2 flex gap-2 pt-2">
-                    <Button
-                      disabled={fetcher.state !== 'idle' || !bankForm.accountHolder || !bankForm.iban}
-                      onClick={() => {
-                        fetcher.submit({
-                          intent: 'upsert-bank-account',
-                          accountHolder: bankForm.accountHolder,
-                          iban: bankForm.iban,
-                          bic: bankForm.bic,
-                          bankName: bankForm.bankName,
-                          sepaMandate: bankForm.sepaMandate ? 'on' : '',
-                          sepaMandateDate: bankForm.sepaMandateDate,
-                          sepaMandateRef: bankForm.sepaMandateRef,
-                        }, { method: 'post' });
-                      }}
-                    >
-                      {fetcher.state !== 'idle' ? 'Speichern...' : 'Speichern'}
-                    </Button>
-                    <Button variant="outline" onClick={() => setBankEditing(false)}>Abbrechen</Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div><Text size="xs" c="dimmed">Kontoinhaber</Text><Text size="sm" fw={500}>{bankAccount!.accountHolder}</Text></div>
-                  <div><Text size="xs" c="dimmed">IBAN</Text><Text size="sm" fw={500} ff="monospace">{bankAccount!.iban}</Text></div>
-                  <div><Text size="xs" c="dimmed">BIC</Text><Text size="sm" fw={500}>{bankAccount!.bic || '–'}</Text></div>
-                  <div><Text size="xs" c="dimmed">Bank</Text><Text size="sm" fw={500}>{bankAccount!.bankName || '–'}</Text></div>
-                  <div className="md:col-span-2">
-                    <Divider my="sm" />
-                    <Text size="xs" c="dimmed" mb="xs">SEPA-Lastschriftmandat</Text>
-                    {bankAccount!.sepaMandate ? (
-                      <Group gap="sm">
-                        <Badge variant="outline" color="green">Erteilt</Badge>
-                        {bankAccount!.sepaMandateDate && <Text size="sm" c="dimmed">Datum: {bankAccount!.sepaMandateDate}</Text>}
-                        {bankAccount!.sepaMandateRef && <Text size="sm" c="dimmed">Ref: {bankAccount!.sepaMandateRef}</Text>}
-                      </Group>
-                    ) : (
-                      <Badge variant="outline" color="gray">Nicht erteilt</Badge>
-                    )}
-                  </div>
-                </div>
-              )}
-            </Card.Section>
-          </Card>
+          <BankAccountSection bankAccount={bankAccount} member={member} />
         </Tabs.Panel>
 
         {/* Tab: Familie */}
@@ -698,149 +504,9 @@ export default function MemberDetail() {
 
         {/* Tab: Erziehungsberechtigte */}
         <Tabs.Panel value="erziehungsberechtigte">
-          <Card shadow="sm">
-            <Card.Section p="md">
-              <Group justify="space-between" mb="md">
-                <Text fw={600} size="sm">Erziehungsberechtigte</Text>
-                <Button size="xs" leftSection={<Plus size={14} />} onClick={() => {
-                  setGuardianEditing(null);
-                  setGuardianForm({ firstName: '', lastName: '', street: '', zip: '', city: '', phone: '', email: '' });
-                  setGuardianModalOpen(true);
-                }}>Hinzufügen</Button>
-              </Group>
-              {guardians.length === 0 ? (
-                <Text size="sm" c="dimmed">Keine Erziehungsberechtigten vorhanden.</Text>
-              ) : (
-                <Stack gap="sm">
-                  {guardians.map((g) => (
-                    <Card key={g.id} withBorder padding="sm">
-                      <Group justify="space-between">
-                        <div>
-                          <Text size="sm" fw={500}>{g.firstName} {g.lastName}</Text>
-                          {g.email && <Text size="xs" c="dimmed">{g.email}</Text>}
-                          {g.phone && <Text size="xs" c="dimmed">{g.phone}</Text>}
-                          {(g.street || g.city) && (
-                            <Text size="xs" c="dimmed">{[g.street, g.zip, g.city].filter(Boolean).join(', ')}</Text>
-                          )}
-                        </div>
-                        <Group gap="xs">
-                          <ActionIcon variant="subtle" onClick={() => {
-                            setGuardianEditing(g.id);
-                            setGuardianForm({
-                              firstName: g.firstName,
-                              lastName: g.lastName,
-                              street: g.street ?? '',
-                              zip: g.zip ?? '',
-                              city: g.city ?? '',
-                              phone: g.phone ?? '',
-                              email: g.email ?? '',
-                            });
-                            setGuardianModalOpen(true);
-                          }}><Pencil size={14} /></ActionIcon>
-                          <ActionIcon variant="subtle" color="red" onClick={() => {
-                            if (confirm('Erziehungsberechtigten löschen?')) {
-                              fetcher.submit({ intent: 'delete-guardian', guardianId: g.id }, { method: 'post' });
-                            }
-                          }}><Trash2 size={14} /></ActionIcon>
-                        </Group>
-                      </Group>
-                    </Card>
-                  ))}
-                </Stack>
-              )}
-            </Card.Section>
-          </Card>
+          <GuardianSection guardians={guardians} />
         </Tabs.Panel>
       </Tabs>
-
-      <Modal opened={roleModalOpen} onClose={() => setRoleModalOpen(false)} title="Rolle zuweisen">
-        <Stack>
-          <Select
-            label="Rolle"
-            value={selectedRoleId}
-            onChange={(value) => setSelectedRoleId(value ?? '')}
-            data={availableRoles.map((role) => ({
-              value: role.id,
-              label: `${role.name} · ${role.roleType} · ${role.scope}`,
-            }))}
-          />
-          <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setRoleModalOpen(false)}>Abbrechen</Button>
-            <Button
-              disabled={!selectedRoleId || fetcher.state !== 'idle'}
-              onClick={() => fetcher.submit({ intent: 'assign-role', roleId: selectedRoleId }, { method: 'post' })}
-            >
-              Zuweisen
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
-
-      <Modal opened={groupModalOpen} onClose={() => setGroupModalOpen(false)} title="Team / Gruppe zuweisen">
-        <Stack>
-          <Select
-            label="Gruppe"
-            value={selectedGroupId}
-            onChange={(value) => setSelectedGroupId(value ?? '')}
-            data={groups
-              .filter((group) => !member.groups.some((assigned) => assigned.id === group.id))
-              .map((group) => ({
-                value: group.id,
-                label: [group.name, group.ageBand, group.season].filter(Boolean).join(' · '),
-              }))}
-          />
-          <Select
-            label="Funktion"
-            value={selectedGroupRole}
-            onChange={(value) => setSelectedGroupRole(value ?? 'Spieler')}
-            data={groupMemberRoleOptions}
-          />
-          <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setGroupModalOpen(false)}>Abbrechen</Button>
-            <Button
-              disabled={!selectedGroupId || fetcher.state !== 'idle'}
-              onClick={() => fetcher.submit({ intent: 'add-group-member', groupId: selectedGroupId, groupRole: selectedGroupRole }, { method: 'post' })}
-            >
-              Zuweisen
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
-
-      {/* Guardian modal */}
-      <Modal
-        opened={guardianModalOpen}
-        onClose={() => setGuardianModalOpen(false)}
-        title={guardianEditing ? 'Erziehungsberechtigten bearbeiten' : 'Erziehungsberechtigten hinzufügen'}
-      >
-        <Stack>
-          <div className="grid grid-cols-2 gap-4">
-            <TextInput label="Vorname *" value={guardianForm.firstName} onChange={(e) => setGuardianForm(f => ({ ...f, firstName: e.target.value }))} />
-            <TextInput label="Nachname *" value={guardianForm.lastName} onChange={(e) => setGuardianForm(f => ({ ...f, lastName: e.target.value }))} />
-            <TextInput label="E-Mail" value={guardianForm.email} onChange={(e) => setGuardianForm(f => ({ ...f, email: e.target.value }))} />
-            <TextInput label="Telefon" value={guardianForm.phone} onChange={(e) => setGuardianForm(f => ({ ...f, phone: e.target.value }))} />
-            <TextInput label="Straße" value={guardianForm.street} onChange={(e) => setGuardianForm(f => ({ ...f, street: e.target.value }))} />
-            <TextInput label="PLZ" value={guardianForm.zip} onChange={(e) => setGuardianForm(f => ({ ...f, zip: e.target.value }))} />
-            <TextInput label="Stadt" className="col-span-2" value={guardianForm.city} onChange={(e) => setGuardianForm(f => ({ ...f, city: e.target.value }))} />
-          </div>
-          <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setGuardianModalOpen(false)}>Abbrechen</Button>
-            <Button
-              loading={fetcher.state !== 'idle'}
-              onClick={() => {
-                const data: Record<string, string> = {
-                  intent: guardianEditing ? 'update-guardian' : 'create-guardian',
-                  ...guardianForm,
-                };
-                if (guardianEditing) data.guardianId = guardianEditing;
-                fetcher.submit(data, { method: 'post' });
-              }}
-            >
-              Speichern
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
 
     </div>
   );

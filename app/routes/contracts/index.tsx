@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link, useFetcher, useLoaderData, useActionData, useSearchParams } from 'react-router';
+import { useState } from 'react';
+import { format, parseISO } from 'date-fns';
+import { Link, useLoaderData, useSearchParams } from 'react-router';
+import { useFetcherNotify } from '@/hooks/use-fetcher-notify';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
-import { FileText, Plus, Search, MoreHorizontal, Eye, XCircle, Receipt } from 'lucide-react';
+import { FileText, Plus, MoreHorizontal, Eye, XCircle, Receipt } from 'lucide-react';
+import { DebouncedSearchInput } from '@/components/ui/debounced-search-input';
 import {
   Badge, Button, ActionIcon, Card, Group, Stack, Text, Select, Modal, TextInput, Menu,
 } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
 import { RoutePendingOverlay } from '@/components/ui/route-pending-overlay';
 import { useRoutePending } from '@/hooks/use-route-pending';
 import { buildSearchParams } from '@/lib/search-params';
@@ -69,13 +71,15 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
 export default function ContractsIndexRoute() {
   const { data } = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const fetcher = useFetcher<ContractsActionData>();
+  const [cancelTarget, setCancelTarget] = useState<{ id: string; date: string } | null>(null);
   const { isSearchPending } = useRoutePending();
-  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [cancelId, setCancelId] = useState('');
-  const [cancelDate, setCancelDate] = useState(new Date().toISOString().slice(0, 10));
+
+  const fetcher = useFetcherNotify<ContractsActionData>(
+    { cancel: 'Vertrag wurde gekündigt', 'create-invoice': 'Rechnung erstellt' },
+    { onSuccess: (d) => { if (d.intent === 'cancel') setCancelTarget(null); } },
+  );
+
   const statusFilter = searchParams.get('status') || '';
   const kindFilter = searchParams.get('contract_kind') || '';
 
@@ -85,16 +89,6 @@ export default function ContractsIndexRoute() {
   const active = contracts.filter((contract) => contract.status === 'ACTIVE').length;
   const cancelled = contracts.filter((contract) => contract.status === 'CANCELLED').length;
   const totalRevenue = contracts.reduce((sum, contract) => sum + (contract.currentPrice || 0), 0);
-
-  useEffect(() => {
-    const payload = fetcher.data || actionData;
-    if (!payload) return;
-    if (payload.success) {
-      notifications.show({ color: 'green', message: payload.intent === 'create-invoice' ? 'Rechnung erstellt' : 'Vertrag wurde gekündigt' });
-    } else if (payload.error) {
-      notifications.show({ color: 'red', message: payload.error });
-    }
-  }, [fetcher.data, actionData]);
 
   const updateSearchParams = (updates: Record<string, string | null>) => {
     setSearchParams(buildSearchParams(searchParams, updates));
@@ -150,9 +144,11 @@ export default function ContractsIndexRoute() {
       </div>
 
       <Group gap="sm">
-        <ContractsSearchInput
+        <DebouncedSearchInput
+          placeholder="Vertragsnummer suchen..."
           initialValue={searchParams.get('search') || ''}
           onSearchChange={(value: string) => updateSearchParams({ search: value || null })}
+          style={{ flex: 1 }}
         />
         <Select
           value={statusFilter || null}
@@ -232,14 +228,14 @@ export default function ContractsIndexRoute() {
                         <Badge color={status.color}>{status.label}</Badge>
                         {contract.cancellationDate && (
                           <Text size="xs" c="dimmed" mt={4}>
-                            Kündigung: {new Date(contract.cancellationDate).toLocaleDateString('de-DE')}
+                            Kündigung: {format(parseISO(contract.cancellationDate), 'dd.MM.yyyy')}
                           </Text>
                         )}
                       </td>
                       <td className="p-3 font-medium">{contract.currentPrice?.toFixed(2)} €</td>
                       <td className="p-3 text-xs">
-                        {contract.startDate ? new Date(contract.startDate).toLocaleDateString('de-DE') : '-'}
-                        {contract.endDate && ` – ${new Date(contract.endDate).toLocaleDateString('de-DE')}`}
+                        {contract.startDate ? format(parseISO(contract.startDate), 'dd.MM.yyyy') : '-'}
+                        {contract.endDate && ` – ${format(parseISO(contract.endDate), 'dd.MM.yyyy')}`}
                       </td>
                       <td className="p-3 text-xs">{periodMap[contract.billingPeriod || ''] || '-'}</td>
                       <td className="p-3 text-right" onClick={(event) => event.stopPropagation()}>
@@ -261,7 +257,7 @@ export default function ContractsIndexRoute() {
                                 <Menu.Item
                                   color="red"
                                   leftSection={<XCircle size={16} />}
-                                  onClick={() => { setCancelId(contract.id); setCancelDialogOpen(true); }}
+                                  onClick={() => setCancelTarget({ id: contract.id, date: format(new Date(), 'yyyy-MM-dd') })}
                                 >
                                   Kündigen
                                 </Menu.Item>
@@ -285,24 +281,24 @@ export default function ContractsIndexRoute() {
         </Text>
       )}
 
-      <Modal opened={cancelDialogOpen} onClose={() => setCancelDialogOpen(false)} title="Vertrag kündigen">
+      <Modal opened={cancelTarget !== null} onClose={() => setCancelTarget(null)} title="Vertrag kündigen">
         <Stack gap="md">
           <TextInput
             label="Kündigungsdatum"
             type="date"
-            value={cancelDate}
-            onChange={(event) => setCancelDate(event.target.value)}
+            value={cancelTarget?.date ?? ''}
+            onChange={(e) => setCancelTarget((t) => t ? { ...t, date: e.target.value } : null)}
           />
           <Text size="sm" c="dimmed">
             Das effektive Enddatum wird basierend auf der Kündigungsfrist berechnet.
           </Text>
           <Group justify="flex-end" mt="md">
-            <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>Abbrechen</Button>
+            <Button variant="outline" onClick={() => setCancelTarget(null)}>Abbrechen</Button>
             <Button
               color="red"
               onClick={() => {
-                setCancelDialogOpen(false);
-                fetcher.submit({ intent: 'cancel', id: cancelId, cancellationDate: cancelDate }, { method: 'post' });
+                if (!cancelTarget) return;
+                fetcher.submit({ intent: 'cancel', id: cancelTarget.id, cancellationDate: cancelTarget.date }, { method: 'post' });
               }}
               disabled={fetcher.state !== 'idle'}
             >
@@ -315,37 +311,3 @@ export default function ContractsIndexRoute() {
   );
 }
 
-type ContractsSearchInputProps = {
-  initialValue: string;
-  onSearchChange: (value: string) => void;
-};
-
-function ContractsSearchInput({ initialValue, onSearchChange }: ContractsSearchInputProps) {
-  const [value, setValue] = useState(initialValue);
-  const timeoutRef = useRef<number | null>(null);
-
-  useEffect(() => () => {
-    if (timeoutRef.current !== null) {
-      window.clearTimeout(timeoutRef.current);
-    }
-  }, []);
-
-  return (
-    <TextInput
-      placeholder="Vertragsnummer suchen..."
-      leftSection={<Search size={16} />}
-      style={{ flex: 1 }}
-      value={value}
-      onChange={(event) => {
-        const nextValue = event.target.value;
-        setValue(nextValue);
-        if (timeoutRef.current !== null) {
-          window.clearTimeout(timeoutRef.current);
-        }
-        timeoutRef.current = window.setTimeout(() => {
-          onSearchChange(nextValue);
-        }, 250);
-      }}
-    />
-  );
-}

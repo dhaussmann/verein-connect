@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { format, addMonths, parseISO } from 'date-fns';
 import { Form, Link, redirect, useLoaderData, useActionData, useNavigation } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import { ArrowLeft } from 'lucide-react';
@@ -91,7 +92,7 @@ export default function ContractNewRoute() {
     contract_kind: 'MEMBERSHIP',
     membership_type_id: '',
     tarif_id: '',
-    start_date: new Date().toISOString().slice(0, 10),
+    start_date: format(new Date(), 'yyyy-MM-dd'),
     end_date: '',
     billing_period: '',
     current_price: '',
@@ -115,9 +116,7 @@ export default function ContractNewRoute() {
     const autoRenew = type.contractType === 'AUTO_RENEW' || type.contractType === 'FIXED_RENEW';
     let endDate = '';
     if (type.contractDurationMonths) {
-      const start = new Date(form.start_date);
-      start.setMonth(start.getMonth() + type.contractDurationMonths);
-      endDate = start.toISOString().slice(0, 10);
+      endDate = format(addMonths(parseISO(form.start_date), type.contractDurationMonths), 'yyyy-MM-dd');
     }
 
     setForm(prev => ({
@@ -148,12 +147,6 @@ export default function ContractNewRoute() {
       set('current_price', pricing.price.toString());
     }
   };
-
-  useEffect(() => {
-    if (actionData?.error) {
-      notifications.show({ color: 'red', message: actionData.error });
-    }
-  }, [actionData]);
 
   return (
     <Stack gap="lg">
@@ -308,7 +301,8 @@ export default function ContractNewRoute() {
             </Card>
           </div>
 
-          <Group justify="flex-end" gap="sm">
+          <Group justify="flex-end" gap="sm" align="center">
+            {actionData?.error && <Text c="red" size="sm">{actionData.error}</Text>}
             <Button variant="outline" type="button" component={Link} to="/contracts">Abbrechen</Button>
             <Button type="submit" disabled={navigationState === 'submitting'}>
               {navigationState === 'submitting' ? 'Wird erstellt...' : 'Vertrag erstellen'}
