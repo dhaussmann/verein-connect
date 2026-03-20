@@ -7,13 +7,11 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import type {
-  Group as ContractGroup,
   Member,
   MembershipType,
   Tarif,
 } from '@/modules/contracts/types/contracts.types';
 import { requireRouteData } from '@/core/runtime/route';
-import { listGroupsUseCase } from '@/modules/groups/use-cases/list-groups.use-case';
 import { listMembersUseCase } from '@/modules/members/use-cases/list-members.use-case';
 import { listMembershipTypesUseCase, listTarifsUseCase } from '@/modules/contracts/use-cases/contract-settings.use-cases';
 import { createContractUseCase } from '@/modules/contracts/use-cases/contracts.use-cases';
@@ -32,7 +30,6 @@ type ContractFormState = {
   contract_kind: 'MEMBERSHIP' | 'TARIF';
   membership_type_id: string;
   tarif_id: string;
-  group_id: string;
   start_date: string;
   end_date: string;
   billing_period: string;
@@ -47,13 +44,12 @@ export const handle = {
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
-  const [membersResult, mtData, tarifData, groupsResult] = await Promise.all([
+  const [membersResult, mtData, tarifData] = await Promise.all([
     listMembersUseCase(env, user.orgId, { page: 1, perPage: 500 }),
     listMembershipTypesUseCase(env, user.orgId),
     listTarifsUseCase(env, user.orgId),
-    listGroupsUseCase(env, user.orgId),
   ]);
-  return { membersData: { data: membersResult.members }, mtData, tarifData, groupsData: { data: groupsResult.groups } };
+  return { membersData: { data: membersResult.members }, mtData, tarifData };
 }
 
 export async function action({ request, context }: ActionFunctionArgs) {
@@ -74,7 +70,6 @@ export async function action({ request, context }: ActionFunctionArgs) {
         notes: String(formData.get('notes') || ''),
         membership_type_id: String(formData.get('membership_type_id') || ''),
         tarif_id: String(formData.get('tarif_id') || ''),
-        group_id: String(formData.get('group_id') || ''),
       },
     });
     return redirect('/contracts');
@@ -84,21 +79,18 @@ export async function action({ request, context }: ActionFunctionArgs) {
 }
 
 export default function ContractNewRoute() {
-  const { membersData, mtData, tarifData, groupsData } = useLoaderData<typeof loader>();
+  const { membersData, mtData, tarifData } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigationState = useNavigation().state;
 
   const members = (membersData as ContractNewListData<Member>)?.data || [];
   const membershipTypes = (mtData as ContractNewListData<MembershipType>)?.data || [];
   const tarifs = (tarifData as ContractNewListData<Tarif>)?.data || [];
-  const groups = (groupsData as ContractNewListData<ContractGroup>)?.data || [];
-
   const [form, setForm] = useState<ContractFormState>({
     member_id: '',
     contract_kind: 'MEMBERSHIP',
     membership_type_id: '',
     tarif_id: '',
-    group_id: '',
     start_date: new Date().toISOString().slice(0, 10),
     end_date: '',
     billing_period: '',
@@ -121,8 +113,6 @@ export default function ContractNewRoute() {
     const billingPeriod = firstPricing?.billingPeriod || 'MONTHLY';
     const price = firstPricing?.price?.toString() || '';
     const autoRenew = type.contractType === 'AUTO_RENEW' || type.contractType === 'FIXED_RENEW';
-    const groupId = type.defaultGroupId || '';
-
     let endDate = '';
     if (type.contractDurationMonths) {
       const start = new Date(form.start_date);
@@ -135,7 +125,6 @@ export default function ContractNewRoute() {
       billing_period: billingPeriod,
       current_price: price,
       auto_renew: autoRenew,
-      group_id: groupId,
       end_date: endDate,
     }));
   };
@@ -192,7 +181,6 @@ export default function ContractNewRoute() {
           <input type="hidden" name="contract_kind" value={form.contract_kind} />
           <input type="hidden" name="membership_type_id" value={form.membership_type_id} />
           <input type="hidden" name="tarif_id" value={form.tarif_id} />
-          <input type="hidden" name="group_id" value={form.group_id} />
           <input type="hidden" name="billing_period" value={form.billing_period} />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Mitglied & Vertragsart */}
@@ -241,14 +229,6 @@ export default function ContractNewRoute() {
                   />
                 )}
 
-                <Select
-                  label="Gruppe (optional)"
-                  value={form.group_id || null}
-                  onChange={(val) => set('group_id', val ?? '')}
-                  placeholder="Keine Gruppe"
-                  data={groups.map((g) => ({ value: g.id, label: g.name }))}
-                  clearable
-                />
               </Stack>
             </Card>
 

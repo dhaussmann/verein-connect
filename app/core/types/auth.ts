@@ -9,5 +9,5 @@ export type SessionUser = {
   avatarUrl?: string | null;
   roles: string[];
   permissions: string[];
-  organization?: { id: string; name: string; slug: string; plan: string } | null;
+  organization?: { id: string; name: string; slug: string } | null;
 };

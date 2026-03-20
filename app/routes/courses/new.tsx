@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import {
   Button,
   Card,
+  Checkbox,
   Select,
   Switch,
   Textarea,
@@ -19,6 +20,7 @@ import { ArrowLeft, CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { notifications } from '@mantine/notifications';
 import { requireRouteData } from '@/core/runtime/route';
+import { listGroupsUseCase } from '@/modules/groups/use-cases/list-groups.use-case';
 import { listMembersUseCase } from '@/modules/members/use-cases/list-members.use-case';
 import { createEventUseCase } from '@/modules/events/use-cases/events.use-cases';
 
@@ -30,9 +32,13 @@ export const handle = {
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const { env, user } = await requireRouteData(request, context);
-  const memberResult = await listMembersUseCase(env, user.orgId, { perPage: 200, page: 1 });
+  const [memberResult, groupsResult] = await Promise.all([
+    listMembersUseCase(env, user.orgId, { perPage: 200, page: 1 }),
+    listGroupsUseCase(env, user.orgId),
+  ]);
   const membersData = { data: memberResult.members };
-  return { membersData };
+  const groupsData = { data: groupsResult.groups.filter((group) => group.category === 'team') };
+  return { membersData, groupsData };
 }
 
 export async function action({ request, context }: ActionFunctionArgs) {
@@ -66,6 +72,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         autoInvoice: formData.get("autoInvoice") === "on",
         isPublic: formData.get("isPublic") === "on",
         instructorId: String(formData.get("instructorId") || "") || undefined,
+        targetGroupIds: formData.getAll("targetGroupIds").map(String).filter(Boolean),
         weekdays,
         status: "Entwurf",
       },
@@ -77,7 +84,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 }
 
 export default function CourseNewRoute() {
-  const { membersData } = useLoaderData<typeof loader>();
+  const { membersData, groupsData } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigationState = useNavigation().state;
   const [eventType, setEventType] = useState('Einmalig');
@@ -87,6 +94,7 @@ export default function CourseNewRoute() {
   const [isPublic, setIsPublic] = useState(true);
   const [showHomepage, setShowHomepage] = useState(false);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
 
@@ -95,6 +103,7 @@ export default function CourseNewRoute() {
   };
 
   const trainers = (membersData?.data ?? []).filter((m: { roles?: string[] }) => m.roles?.includes('Trainer') || m.roles?.includes('trainer'));
+  const teamGroups = groupsData?.data ?? [];
 
   useEffect(() => {
     if (actionData?.error) {
@@ -115,6 +124,9 @@ export default function CourseNewRoute() {
         <input type="hidden" name="endDate" value={endDate ? format(endDate, 'yyyy-MM-dd') : ''} />
         {selectedDays.map((day) => (
           <input key={day} type="hidden" name="weekdays" value={day} />
+        ))}
+        {selectedGroupIds.map((groupId) => (
+          <input key={groupId} type="hidden" name="targetGroupIds" value={groupId} />
         ))}
         {costEnabled && <input type="hidden" name="costEnabled" value="on" />}
         <Stack gap="lg" maw={768}>
@@ -213,6 +225,18 @@ export default function CourseNewRoute() {
               <SimpleGrid cols={{ base: 1, md: 2 }}>
                 <TextInput name="maxParticipants" type="number" label="Max. Teilnehmer" placeholder="20" min={1} />
               </SimpleGrid>
+              {teamGroups.length > 0 && (
+                <div>
+                  <Text size="sm" fw={500} mb={6}>Zielteams</Text>
+                  <Checkbox.Group value={selectedGroupIds} onChange={setSelectedGroupIds}>
+                    <Stack gap={6}>
+                      {teamGroups.map((group: { id: string; name: string }) => (
+                        <Checkbox key={group.id} value={group.id} label={group.name} />
+                      ))}
+                    </Stack>
+                  </Checkbox.Group>
+                </div>
+              )}
               <Group justify="space-between">
                 <Text size="sm">Warteliste aktivieren</Text>
                 <Switch checked={waitlistEnabled} onChange={(e) => setWaitlistEnabled(e.currentTarget.checked)} />

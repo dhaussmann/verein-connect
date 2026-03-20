@@ -5,14 +5,13 @@ import { Save, Pencil } from 'lucide-react';
 import type {
   ContractSettings,
   DiscountGroup,
-  Group as ContractGroup,
   MembershipType,
   Tarif,
 } from '@/modules/contracts/types/contracts.types';
 import MembershipTypeDialog, { toApiPayload } from '@/components/contracts/MembershipTypeDialog';
 import TarifDialog, { toTarifApiPayload } from '@/components/contracts/TarifDialog';
 import {
-  Badge, Button, ActionIcon, Card, Group, Stack, Text, Tabs, Select, Switch, Textarea, TextInput, Modal,
+  Badge, Button, ActionIcon, Card, Group, Stack, Text, Tabs, Select, Switch, TextInput, Modal,
 } from '@mantine/core';
 import { Trash2, Plus } from 'lucide-react';
 import { notifications } from '@mantine/notifications';
@@ -72,7 +71,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     listGroupsUseCase(env, user.orgId),
   ]);
   const groupData = { data: groupsResult.groups };
-  return { settings, mtData, tarifData, dgData, groupData };
+  return { settings, mtData, tarifData, dgData, groupData, orgSlug: user.organization?.slug || '' };
 }
 
 export async function action({ request, context }: ActionFunctionArgs) {
@@ -142,7 +141,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 }
 
 export default function ContractSettingsRoute() {
-  const { settings, mtData, tarifData, dgData, groupData } = useLoaderData<typeof loader>();
+  const { settings, mtData, tarifData, dgData, groupData, orgSlug } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const fetcher = useFetcher<ContractSettingsActionData>();
   const revalidator = useRevalidator();
@@ -151,7 +150,7 @@ export default function ContractSettingsRoute() {
   const membershipTypes = (mtData as CollectionData<MembershipType>)?.data || [];
   const tarifs = (tarifData as CollectionData<Tarif>)?.data || [];
   const discountGroups = (dgData as CollectionData<DiscountGroup>)?.data || [];
-  const groups = (groupData as CollectionData<ContractGroup>)?.data || [];
+  const groups = (groupData as CollectionData<{ id: string; orgId: string; name: string; description: string | null; category: string | null; createdAt: string }>)?.data || [];
 
   const [form, setForm] = useState(() => createSettingsForm(contractSettings));
 
@@ -232,16 +231,16 @@ export default function ContractSettingsRoute() {
     <Stack gap="lg">
       <div>
         <Text size="xl" fw={700}>Vertragseinstellungen</Text>
-        <Text c="dimmed" size="sm">Konfigurieren Sie Mitgliedschaftsarten, Tarife, Gruppen und Abrechnungsoptionen</Text>
+        <Text c="dimmed" size="sm">Konfigurieren Sie Mitgliedsarten, Tarife, Teams und Abrechnungsoptionen</Text>
       </div>
 
       <Tabs defaultValue="settings">
         <Tabs.List grow>
           <Tabs.Tab value="settings">Allgemein</Tabs.Tab>
-          <Tabs.Tab value="membership-types">Mitgliedschaftsarten</Tabs.Tab>
+          <Tabs.Tab value="membership-types">Mitgliedsarten</Tabs.Tab>
           <Tabs.Tab value="tarifs">Tarife</Tabs.Tab>
           <Tabs.Tab value="discount-groups">Rabattgruppen</Tabs.Tab>
-          <Tabs.Tab value="groups">Gruppen</Tabs.Tab>
+          <Tabs.Tab value="groups">Teams</Tabs.Tab>
         </Tabs.List>
 
         {/* General Settings */}
@@ -286,42 +285,35 @@ export default function ContractSettingsRoute() {
                   checked={form.member_cancellation_allowed}
                   onChange={(e) => setForm(f => ({ ...f, member_cancellation_allowed: e.currentTarget.checked }))}
                 />
-              </Stack>
-            </Card>
-
-            <Card>
-              <Text fw={600} mb="md">Selbstregistrierung</Text>
-              <Stack gap="sm">
                 <Switch
-                  label="Selbstregistrierung aktivieren"
+                  label="Öffentliche Selbstregistrierung aktivieren"
                   checked={form.self_registration_enabled}
                   onChange={(e) => setForm(f => ({ ...f, self_registration_enabled: e.currentTarget.checked }))}
                 />
-                {form.self_registration_enabled && (
-                  <>
-                    <Select
-                      label="Zugangsart"
-                      value={form.self_registration_access}
-                      onChange={(val) => setForm(f => ({ ...f, self_registration_access: val ?? 'LINK_AND_FORM' }))}
-                      data={[
-                        { value: 'LINK_AND_FORM', label: 'Link und Formular' },
-                        { value: 'LINK_ONLY', label: 'Nur Link' },
-                      ]}
-                    />
-                    <Textarea
-                      label="Willkommenstext"
-                      value={form.welcome_page_text}
-                      onChange={(e) => setForm(f => ({ ...f, welcome_page_text: e.target.value }))}
-                      rows={3}
-                    />
-                    <Textarea
-                      label="Bestätigungstext"
-                      value={form.confirmation_page_text}
-                      onChange={(e) => setForm(f => ({ ...f, confirmation_page_text: e.target.value }))}
-                      rows={3}
-                    />
-                  </>
-                )}
+                <Select
+                  label="Zugriffsart"
+                  value={form.self_registration_access}
+                  onChange={(val) => setForm(f => ({ ...f, self_registration_access: val ?? 'LINK_AND_FORM' }))}
+                  data={[
+                    { value: 'LINK_AND_FORM', label: 'Direkter Link & Formular' },
+                    { value: 'LINK_ONLY', label: 'Nur Direktlink' },
+                  ]}
+                />
+                <TextInput
+                  label="Öffentlicher Link"
+                  value={orgSlug ? `/join/${orgSlug}` : ''}
+                  readOnly
+                />
+                <TextInput
+                  label="Begrüßungstext"
+                  value={form.welcome_page_text}
+                  onChange={(e) => setForm(f => ({ ...f, welcome_page_text: e.target.value }))}
+                />
+                <TextInput
+                  label="Bestätigungstext"
+                  value={form.confirmation_page_text}
+                  onChange={(e) => setForm(f => ({ ...f, confirmation_page_text: e.target.value }))}
+                />
               </Stack>
             </Card>
 
@@ -337,11 +329,11 @@ export default function ContractSettingsRoute() {
         <Tabs.Panel value="membership-types" pt="md">
           <Card>
             <Group justify="space-between" mb="md">
-              <Text fw={600}>Mitgliedschaftsarten</Text>
+              <Text fw={600}>Mitgliedsarten</Text>
               <Button size="sm" onClick={openMtCreate} leftSection={<Plus size={16} />}>Neu</Button>
             </Group>
             {membershipTypes.length === 0 ? (
-              <Text c="dimmed" size="sm">Keine Mitgliedschaftsarten vorhanden</Text>
+              <Text c="dimmed" size="sm">Keine Mitgliedsarten vorhanden</Text>
             ) : (
               <Stack gap="xs">
                 {membershipTypes.map((mt) => (
@@ -358,7 +350,6 @@ export default function ContractSettingsRoute() {
                         {mt.pricing?.length > 0 && mt.pricing.map((p, i) => (
                           <Badge key={i} variant="outline">{p.price.toFixed(2)} € / {PERIOD_LABELS[p.billingPeriod] || p.billingPeriod}</Badge>
                         ))}
-                        {mt.groupName && <Badge color="gray">{mt.groupName}</Badge>}
                       </Group>
                     </div>
                     <Group gap={4} ml="sm">
@@ -366,7 +357,7 @@ export default function ContractSettingsRoute() {
                         <Pencil size={16} />
                       </ActionIcon>
                       <ActionIcon variant="subtle" color="red" onClick={() => {
-                        if (confirm('Mitgliedschaftsart löschen?')) fetcher.submit({ intent: 'delete-membership-type', id: mt.id }, { method: 'post' });
+                        if (confirm('Mitgliedsart löschen?')) fetcher.submit({ intent: 'delete-membership-type', id: mt.id }, { method: 'post' });
                       }}>
                         <Trash2 size={16} />
                       </ActionIcon>
@@ -403,7 +394,6 @@ export default function ContractSettingsRoute() {
                         {t.pricing?.length > 0 && t.pricing.map((p, i) => (
                           <Badge key={i} variant="outline">{p.price.toFixed(2)} € / {PERIOD_LABELS[p.billingPeriod] || p.billingPeriod}</Badge>
                         ))}
-                        {t.groupName && <Badge color="gray">{t.groupName}</Badge>}
                       </Group>
                     </div>
                     <Group gap={4} ml="sm">
@@ -438,7 +428,7 @@ export default function ContractSettingsRoute() {
                   <div key={dg.id} className="flex items-center justify-between p-3 rounded-lg border">
                     <div>
                       <Text fw={500}>{dg.name}</Text>
-                      {dg.groupName && <Text size="xs" c="dimmed">Gruppe: {dg.groupName}</Text>}
+                      {dg.groupName && <Text size="xs" c="dimmed">Team: {dg.groupName}</Text>}
                     </div>
                     <ActionIcon variant="subtle" color="red" onClick={() => {
                       if (confirm('Rabattgruppe löschen?')) fetcher.submit({ intent: 'delete-discount-group', id: dg.id }, { method: 'post' });
@@ -456,11 +446,11 @@ export default function ContractSettingsRoute() {
         <Tabs.Panel value="groups" pt="md">
           <Card>
             <Group justify="space-between" mb="md">
-              <Text fw={600}>Gruppen</Text>
+              <Text fw={600}>Teams</Text>
               <Button size="sm" onClick={() => { setGroupName(''); setGroupDialogOpen(true); }} leftSection={<Plus size={16} />}>Neu</Button>
             </Group>
             {groups.length === 0 ? (
-              <Text c="dimmed" size="sm">Keine Gruppen vorhanden</Text>
+              <Text c="dimmed" size="sm">Keine Teams vorhanden</Text>
             ) : (
               <Stack gap="xs">
                 {groups.map((g) => (
@@ -470,7 +460,7 @@ export default function ContractSettingsRoute() {
                       {g.description && <Text size="xs" c="dimmed">{g.description}</Text>}
                     </div>
                     <ActionIcon variant="subtle" color="red" onClick={() => {
-                      if (confirm('Gruppe löschen?')) fetcher.submit({ intent: 'delete-group', id: g.id }, { method: 'post' });
+                      if (confirm('Team löschen?')) fetcher.submit({ intent: 'delete-group', id: g.id }, { method: 'post' });
                     }}>
                       <Trash2 size={16} />
                     </ActionIcon>
@@ -487,7 +477,6 @@ export default function ContractSettingsRoute() {
         open={mtDialogOpen}
         onOpenChange={setMtDialogOpen}
         editItem={mtEditItem}
-        groups={groups}
         onSave={handleMtSave}
         saving={mtSaving || fetcher.state !== 'idle'}
       />
@@ -497,7 +486,6 @@ export default function ContractSettingsRoute() {
         open={tarifDialogOpen}
         onOpenChange={setTarifDialogOpen}
         editItem={tarifEditItem}
-        groups={groups}
         membershipTypes={membershipTypes}
         onSave={handleTarifSave}
         saving={tarifSaving || fetcher.state !== 'idle'}
@@ -531,13 +519,13 @@ export default function ContractSettingsRoute() {
       </Modal>
 
       {/* Create Group Modal */}
-      <Modal opened={groupDialogOpen} onClose={() => setGroupDialogOpen(false)} title="Neue Gruppe">
+      <Modal opened={groupDialogOpen} onClose={() => setGroupDialogOpen(false)} title="Neues Team">
         <Stack gap="md">
           <TextInput
             label="Name"
             value={groupName}
             onChange={(e) => setGroupName(e.target.value)}
-            placeholder="z.B. Abteilung Fußball"
+            placeholder="z.B. U15 oder 1. Herren"
           />
           <Group justify="flex-end" mt="md">
             <Button variant="outline" onClick={() => setGroupDialogOpen(false)}>Abbrechen</Button>

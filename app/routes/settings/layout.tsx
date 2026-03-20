@@ -12,7 +12,6 @@ const settingsNavItems = [
   { to: '/settings/notifications', label: 'Benachrichtigungen' },
   { to: '/settings/integrations', label: 'Integrationen' },
   { to: '/settings/gdpr', label: 'DSGVO & Datenschutz' },
-  { to: '/settings/membership-levels', label: 'Mitgliedsstufen' },
 ];
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
