@@ -14,7 +14,7 @@ Vollständiger Prompt für die Backend-Implementierung
 
 # **Hinweise zur Verwendung**
 
-Dieses Dokument enthält den vollständigen Prompt für eine neue Clude Opus 4.6 Instanz, die das Backend für die Vereinsverwaltung-SaaS-Plattform implementiert. Der Prompt ist in **Phasen** aufgeteilt:
+Dieses Dokument enthält den vollständigen Prompt für eine neue Claude Opus 4.6 Instanz, die das Backend für die Vereinsverwaltung-SaaS-Plattform implementiert. Der Prompt ist in **Phasen** aufgeteilt:
 
 | Phase | Inhalt | Prio |
 | :---- | :---- | :---- |
