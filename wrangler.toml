@@ -1,4 +1,4 @@
-name = "verein-connect"
+name = "verein-connect-api"
 main = "worker.ts"
 account_id = "e52977b75e8923af6487772b5e91c2b8"
 compatibility_date = "2024-12-01"
