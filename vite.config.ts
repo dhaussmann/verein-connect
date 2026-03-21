@@ -13,6 +13,11 @@ export default defineConfig({
     },
   },
   plugins: [cloudflareDevProxy(), reactRouter()],
+  ssr: {
+    resolve: {
+      conditions: ["workerd", "worker", "browser"],
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./app"),
