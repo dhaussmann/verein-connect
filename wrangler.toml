@@ -1,8 +1,11 @@
 name = "verein-connect"
-main = "./build/server/index.js"
+main = "worker.ts"
 account_id = "e52977b75e8923af6487772b5e91c2b8"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
+
+[build]
+command = "npx react-router build"
 
 [assets]
 directory = "./build/client"
