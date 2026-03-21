@@ -1,0 +1,39 @@
+name = "verein-connect"
+main = "./build/server/index.js"
+account_id = "e52977b75e8923af6487772b5e91c2b8"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "./build/client"
+
+# D1 Datenbank
+[[d1_databases]]
+binding = "DB"
+database_name = "verein-connect-db"
+database_id = "92e8320b-c89d-4a38-96fb-f0dc4a4b5079"
+
+# R2 Bucket für Dateien
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "verein-connect-files"
+
+# KV für Sessions/Cache
+[[kv_namespaces]]
+binding = "KV"
+id = "1cb5f2cd8bac48c38addcc6810f931c7"
+
+# Durable Objects
+[durable_objects]
+bindings = [
+  { name = "CHAT_ROOM", class_name = "ChatRoomDO" },
+  { name = "EVENT_STATS", class_name = "EventStatsDO" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChatRoomDO", "EventStatsDO"]
+
+# Secrets (via wrangler secret put):
+# BETTER_AUTH_SECRET
+# RESEND_API_KEY

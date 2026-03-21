@@ -1,20 +1,22 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import path from "path";
+import { reactRouter } from '@react-router/dev/vite';
+import { cloudflareDevProxy } from '@react-router/dev/vite/cloudflare';
+import { defineConfig } from 'vite';
+import tsconfigPaths from 'vite-tsconfig-paths';
 
-// https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
-  server: {
-    host: "::",
-    port: 8080,
-    hmr: {
-      overlay: false,
-    },
-  },
-  plugins: [react()],
+export default defineConfig({
+  plugins: [
+    cloudflareDevProxy(),
+    reactRouter(),
+    tsconfigPaths(),
+  ],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      'react-dom/server': 'react-dom/server.edge',
     },
   },
-}));
+  ssr: {
+    resolve: {
+      conditions: ['workerd', 'worker', 'browser'],
+    },
+  },
+});
