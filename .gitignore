@@ -7,62 +7,20 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Dependencies
 node_modules
-
-# Local env / secrets
-*.local
-.env
-.env.*
-.dev.vars
-*.pem
-*.key
-*.cert
-*.p12
-*.pfx
-
-# Wrangler local overrides (may contain secrets)
-wrangler.local.toml
-*.local.toml
-
-# Build / generated output
 dist
 dist-ssr
 build
-.react-router
+*.local
+.env
+.env.*
 .wrangler
-coverage
-playwright-report
-test-results
-.cache
-
-# Local database files (D1 local emulation, SQLite)
-*.sqlite
-*.sqlite3
-*.db
-*.db-shm
-*.db-wal
-
-# Data exports / imports — NEVER commit member data (PII/DSGVO)
-*.csv
-*.xlsx
-*.xls
-
-# Cloudflare / Wrangler runtime artifacts
-.mf/
-
-# Claude Code project config (local notes, memory, tasks)
-.claude/
-
-# OS / editors
-.DS_Store
-Thumbs.db
-Desktop.ini
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
+.DS_Store
 *.suo
 *.ntvs*
 *.njsproj

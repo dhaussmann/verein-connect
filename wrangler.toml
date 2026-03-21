@@ -1,5 +1,5 @@
-name = "verein-connect-api"
-main = "worker.ts"
+name = "verein-connect"
+main = "./build/server/index.js"
 account_id = "e52977b75e8923af6487772b5e91c2b8"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
@@ -23,20 +23,17 @@ bucket_name = "verein-connect-files"
 binding = "KV"
 id = "1cb5f2cd8bac48c38addcc6810f931c7"
 
-[triggers]
-crons = ["0 8 * * 1", "0 2 * * *", "0 3 * * *", "0 0 1 * *"]
-
-[[durable_objects.bindings]]
-name = "CHAT_ROOM"
-class_name = "ChatRoomDO"
-
-[[durable_objects.bindings]]
-name = "EVENT_STATS"
-class_name = "EventStatsDO"
+# Durable Objects
+[durable_objects]
+bindings = [
+  { name = "CHAT_ROOM", class_name = "ChatRoomDO" },
+  { name = "EVENT_STATS", class_name = "EventStatsDO" }
+]
 
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ChatRoomDO", "EventStatsDO"]
 
-[vars]
-FRONTEND_URL = "https://verein-connect.pages.dev"
+# Secrets (via wrangler secret put):
+# BETTER_AUTH_SECRET
+# RESEND_API_KEY

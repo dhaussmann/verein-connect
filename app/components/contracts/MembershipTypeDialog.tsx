@@ -1,11 +1,19 @@
-import { useState } from 'react';
-import type { MembershipType, TarifPricing } from '@/core/types/api';
-import { applicationRequirementOptions } from '@/modules/contracts/application-requirements';
+import { useState, useEffect } from 'react';
+import type { MembershipType, Group, TarifPricing } from '@/lib/api';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
-  Button, TextInput, Textarea, Tabs, Checkbox,
-  Radio, Select, Modal,
-} from '@mantine/core';
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 import { Trash2, Plus } from 'lucide-react';
 
 const CONTRACT_TYPES = [
@@ -43,6 +51,7 @@ interface PricingRow {
 export interface MembershipTypeFormData {
   name: string;
   is_active: boolean;
+  default_group_id: string;
   short_description: string;
   description: string;
   bank_account_id: string;
@@ -56,8 +65,10 @@ export interface MembershipTypeFormData {
   cancellation_notice_basis: string;
   renewal_duration_months: string;
   renewal_cancellation_days: string;
+  self_registration_enabled: boolean;
+  is_family_tarif: boolean;
+  min_family_members: string;
   sort_order: string;
-  application_requirements: string[];
   pricing: PricingRow[];
 }
 
@@ -65,6 +76,7 @@ function emptyForm(): MembershipTypeFormData {
   return {
     name: '',
     is_active: true,
+    default_group_id: '',
     short_description: '',
     description: '',
     bank_account_id: '',
@@ -78,8 +90,10 @@ function emptyForm(): MembershipTypeFormData {
     cancellation_notice_basis: 'FROM_CANCELLATION',
     renewal_duration_months: '1',
     renewal_cancellation_days: '1',
+    self_registration_enabled: false,
+    is_family_tarif: false,
+    min_family_members: '3',
     sort_order: '0',
-    application_requirements: [],
     pricing: [{ billing_period: 'MONTHLY', price: '' }],
   };
 }
@@ -88,6 +102,7 @@ function fromMembershipType(mt: MembershipType): MembershipTypeFormData {
   return {
     name: mt.name,
     is_active: mt.isActive === 1,
+    default_group_id: mt.defaultGroupId || '',
     short_description: mt.shortDescription || '',
     description: mt.description || '',
     bank_account_id: mt.bankAccountId || '',
@@ -101,8 +116,10 @@ function fromMembershipType(mt: MembershipType): MembershipTypeFormData {
     cancellation_notice_basis: mt.cancellationNoticeBasis || 'FROM_CANCELLATION',
     renewal_duration_months: String(mt.renewalDurationMonths ?? 1),
     renewal_cancellation_days: String(mt.renewalCancellationDays ?? 1),
+    self_registration_enabled: mt.selfRegistrationEnabled === 1,
+    is_family_tarif: mt.isFamilyTarif === 1,
+    min_family_members: String(mt.minFamilyMembers ?? 3),
     sort_order: String(mt.sortOrder ?? 0),
-    application_requirements: mt.applicationRequirements || [],
     pricing: mt.pricing?.length
       ? mt.pricing.map(p => ({ billing_period: p.billingPeriod, price: String(p.price) }))
       : [{ billing_period: 'MONTHLY', price: '' }],
@@ -113,6 +130,7 @@ export function toApiPayload(form: MembershipTypeFormData) {
   return {
     name: form.name,
     is_active: form.is_active,
+    self_registration_enabled: form.self_registration_enabled,
     short_description: form.short_description || undefined,
     description: form.description || undefined,
     bank_account_id: form.bank_account_id || undefined,
@@ -126,7 +144,9 @@ export function toApiPayload(form: MembershipTypeFormData) {
     cancellation_notice_days: parseInt(form.cancellation_notice_days) || 30,
     cancellation_notice_basis: form.cancellation_notice_basis,
     renewal_cancellation_days: parseInt(form.renewal_cancellation_days) || undefined,
-    application_requirements: form.application_requirements,
+    default_group_id: form.default_group_id || null,
+    is_family_tarif: form.is_family_tarif,
+    min_family_members: parseInt(form.min_family_members) || 3,
     sort_order: parseInt(form.sort_order) || 0,
     pricing: form.pricing
       .filter(p => p.price !== '' && !isNaN(parseFloat(p.price)))
@@ -141,41 +161,22 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editItem: MembershipType | null;
+  groups: Group[];
   onSave: (data: ReturnType<typeof toApiPayload>, isEdit: boolean, id?: string) => Promise<void>;
   saving: boolean;
 }
 
-export default function MembershipTypeDialog({ open, onOpenChange, editItem, onSave, saving }: Props) {
+export default function MembershipTypeDialog({ open, onOpenChange, editItem, groups, onSave, saving }: Props) {
+  const [form, setForm] = useState<MembershipTypeFormData>(emptyForm());
   const isEdit = !!editItem;
 
-  return (
-    <Modal
-      opened={open}
-      onClose={() => onOpenChange(false)}
-      title={isEdit ? 'Mitgliedsart bearbeiten' : 'Neue Mitgliedsart'}
-      size="xl"
-      styles={{ body: { maxHeight: '80vh', overflowY: 'auto' } }}
-    >
-      {open && (
-        <MembershipTypeDialogForm
-          key={editItem?.id ?? 'new'}
-          editItem={editItem}
-          onOpenChange={onOpenChange}
-          onSave={onSave}
-          saving={saving}
-        />
-      )}
-    </Modal>
-  );
-}
+  useEffect(() => {
+    if (open) {
+      setForm(editItem ? fromMembershipType(editItem) : emptyForm());
+    }
+  }, [open, editItem]);
 
-type MembershipTypeDialogFormProps = Pick<Props, 'editItem' | 'onOpenChange' | 'onSave' | 'saving'>;
-
-function MembershipTypeDialogForm({ editItem, onOpenChange, onSave, saving }: MembershipTypeDialogFormProps) {
-  const [form, setForm] = useState<MembershipTypeFormData>(() => editItem ? fromMembershipType(editItem) : emptyForm());
-  const isEdit = !!editItem;
-
-  const set = <K extends keyof MembershipTypeFormData>(key: K, value: MembershipTypeFormData[K]) =>
+  const set = (key: keyof MembershipTypeFormData, value: any) =>
     setForm(prev => ({ ...prev, [key]: value }));
 
   const updatePricing = (index: number, field: keyof PricingRow, value: string) => {
@@ -184,15 +185,6 @@ function MembershipTypeDialogForm({ editItem, onOpenChange, onSave, saving }: Me
       pricing[index] = { ...pricing[index], [field]: value };
       return { ...prev, pricing };
     });
-  };
-
-  const toggleRequirement = (value: string) => {
-    setForm((prev) => ({
-      ...prev,
-      application_requirements: prev.application_requirements.includes(value)
-        ? prev.application_requirements.filter((item) => item !== value)
-        : [...prev.application_requirements, value],
-    }));
   };
 
   const addPricingRow = () => {
@@ -215,42 +207,62 @@ function MembershipTypeDialogForm({ editItem, onOpenChange, onSave, saving }: Me
   const showRenewal = form.contract_type === 'AUTO_RENEW' || form.contract_type === 'FIXED_RENEW';
 
   return (
-    <>
-      <Tabs defaultValue="basisdaten" mt="xs">
-        <Tabs.List grow>
-          <Tabs.Tab value="basisdaten">BASISDATEN</Tabs.Tab>
-          <Tabs.Tab value="automatisierung">DARSTELLUNG</Tabs.Tab>
-        </Tabs.List>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? 'Mitgliedsart bearbeiten' : 'Neue Mitgliedsart'}</DialogTitle>
+        </DialogHeader>
 
-        {/* ─── Tab: Basisdaten ─── */}
-        <Tabs.Panel value="basisdaten" pt="md">
-          <div className="space-y-6">
+        <Tabs defaultValue="basisdaten" className="mt-2">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="basisdaten">BASISDATEN</TabsTrigger>
+            <TabsTrigger value="automatisierung">AUTOMATISIERUNG</TabsTrigger>
+          </TabsList>
+
+          {/* ─── Tab: Basisdaten ─── */}
+          <TabsContent value="basisdaten" className="space-y-6 mt-4">
             {/* Name + Aktiv */}
             <div className="grid grid-cols-2 gap-4">
-              <TextInput
-                label={<span className="text-xs uppercase text-muted-foreground">Name *</span>}
-                value={form.name}
-                onChange={e => set('name', e.target.value)}
-              />
               <div>
-                <Radio.Group
-                  label={<span className="text-xs uppercase text-muted-foreground">Aktiv</span>}
+                <Label className="text-xs uppercase text-muted-foreground">Name *</Label>
+                <Input value={form.name} onChange={e => set('name', e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs uppercase text-muted-foreground">Aktiv</Label>
+                <RadioGroup
                   value={form.is_active ? 'true' : 'false'}
-                  onChange={v => set('is_active', v === 'true')}
+                  onValueChange={v => set('is_active', v === 'true')}
+                  className="flex items-center gap-4 mt-2"
                 >
-                  <div className="flex items-center gap-4 mt-2">
-                    <Radio value="true" label="Ja" />
-                    <Radio value="false" label="Nein" />
+                  <div className="flex items-center gap-1.5">
+                    <RadioGroupItem value="true" id="active-yes" />
+                    <Label htmlFor="active-yes" className="font-normal">Ja</Label>
                   </div>
-                </Radio.Group>
+                  <div className="flex items-center gap-1.5">
+                    <RadioGroupItem value="false" id="active-no" />
+                    <Label htmlFor="active-no" className="font-normal">Nein</Label>
+                  </div>
+                </RadioGroup>
                 <p className="text-xs text-muted-foreground mt-1">Erlaubt das Erstellen neuer Verträge</p>
               </div>
             </div>
 
+            {/* Standardgruppe */}
+            <div>
+              <Label className="text-xs uppercase text-muted-foreground">Standardgruppe für Verträge</Label>
+              <Select value={form.default_group_id || '__none__'} onValueChange={v => set('default_group_id', v === '__none__' ? '' : v)}>
+                <SelectTrigger><SelectValue placeholder="Standardgruppe für Verträge" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Keine</SelectItem>
+                  {groups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Kurzbeschreibung */}
             <div>
+              <Label className="text-xs uppercase text-muted-foreground">Kurzbeschreibung (z. B. Altersgrenze)</Label>
               <Textarea
-                label={<span className="text-xs uppercase text-muted-foreground">Kurzbeschreibung (z. B. Altersgrenze)</span>}
                 value={form.short_description}
                 onChange={e => set('short_description', e.target.value.slice(0, 100))}
                 rows={3}
@@ -260,25 +272,11 @@ function MembershipTypeDialogForm({ editItem, onOpenChange, onSave, saving }: Me
               </p>
             </div>
 
-            <div>
-              <p className="text-xs uppercase text-muted-foreground mb-1">Pflichtangaben im Beitrittsantrag</p>
-              <div className="border rounded-md p-3 space-y-2">
-                {applicationRequirementOptions.map((option) => (
-                  <Checkbox
-                    key={option.value}
-                    label={option.label}
-                    checked={form.application_requirements.includes(option.value)}
-                    onChange={() => toggleRequirement(option.value)}
-                  />
-                ))}
-              </div>
-            </div>
-
             {/* Beschreibung (Rich-Text) */}
             <div>
-              <p className="text-xs uppercase text-muted-foreground mb-1">Beschreibung</p>
+              <Label className="text-xs uppercase text-muted-foreground">Beschreibung</Label>
               <RichTextEditor
-                content={form.description}
+                value={form.description}
                 onChange={v => set('description', v)}
                 placeholder="Detaillierte Beschreibung der Mitgliedsart"
               />
@@ -290,40 +288,52 @@ function MembershipTypeDialogForm({ editItem, onOpenChange, onSave, saving }: Me
               <p className="text-xs text-muted-foreground italic">MwSt. % wird für alle Preise verwendet</p>
             </div>
 
-            <TextInput
-              label={<span className="text-xs uppercase text-muted-foreground">Bankkonto</span>}
-              value={form.bank_account_id}
-              onChange={e => set('bank_account_id', e.target.value)}
-              placeholder="z.B. DE89 3704 0044 0532 0130 00"
-            />
+            <div>
+              <Label className="text-xs uppercase text-muted-foreground">Bankkonto</Label>
+              <Input
+                value={form.bank_account_id}
+                onChange={e => set('bank_account_id', e.target.value)}
+                placeholder="z.B. DE89 3704 0044 0532 0130 00"
+              />
+            </div>
 
-            <TextInput
-              label={<span className="text-xs uppercase text-muted-foreground">Rechnungskategorie</span>}
-              value={form.invoice_category}
-              onChange={e => set('invoice_category', e.target.value)}
-              placeholder="z.B. Mitgliedergebühren"
-            />
+            <div>
+              <Label className="text-xs uppercase text-muted-foreground">Rechnungskategorie</Label>
+              <Input
+                value={form.invoice_category}
+                onChange={e => set('invoice_category', e.target.value)}
+                placeholder="z.B. Mitgliedergebühren"
+              />
+            </div>
 
             <div className="grid grid-cols-3 gap-4">
-              <Select
-                label={<span className="text-xs uppercase text-muted-foreground">MwSt (%)</span>}
-                value={form.vat_percent}
-                onChange={v => set('vat_percent', v ?? '0')}
-                data={VAT_OPTIONS.map(v => ({ value: v, label: v }))}
-              />
-              <Select
-                label={<span className="text-xs uppercase text-muted-foreground">Standard-Rechnungsdatum</span>}
-                value={form.default_invoice_day}
-                onChange={v => set('default_invoice_day', v ?? '1')}
-                data={INVOICE_DAYS.map(d => ({ value: d.value, label: d.label }))}
-              />
-              <TextInput
-                label={<span className="text-xs uppercase text-muted-foreground">Aktivierungsgebühr</span>}
-                type="number"
-                step="0.01"
-                value={form.activation_fee}
-                onChange={e => set('activation_fee', e.target.value)}
-              />
+              <div>
+                <Label className="text-xs uppercase text-muted-foreground">MwSt (%)</Label>
+                <Select value={form.vat_percent} onValueChange={v => set('vat_percent', v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {VAT_OPTIONS.map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs uppercase text-muted-foreground">Standard-Rechnungsdatum</Label>
+                <Select value={form.default_invoice_day} onValueChange={v => set('default_invoice_day', v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {INVOICE_DAYS.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs uppercase text-muted-foreground">Aktivierungsgebühr</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={form.activation_fee}
+                  onChange={e => set('activation_fee', e.target.value)}
+                />
+              </div>
             </div>
 
             {/* ─── Gültigkeitszeitraum ─── */}
@@ -332,20 +342,23 @@ function MembershipTypeDialogForm({ editItem, onOpenChange, onSave, saving }: Me
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <Select
-                label={<span className="text-xs uppercase text-muted-foreground">Vertragstyp</span>}
-                value={form.contract_type}
-                onChange={v => set('contract_type', v ?? 'AUTO_RENEW')}
-                data={CONTRACT_TYPES.map(ct => ({ value: ct.value, label: ct.label }))}
-              />
               <div>
-                <p className="text-xs uppercase text-muted-foreground mb-1">Vertragsdauer</p>
+                <Label className="text-xs uppercase text-muted-foreground">Vertragstyp</Label>
+                <Select value={form.contract_type} onValueChange={v => set('contract_type', v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {CONTRACT_TYPES.map(ct => <SelectItem key={ct.value} value={ct.value}>{ct.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs uppercase text-muted-foreground">Vertragsdauer</Label>
                 <div className="flex items-center gap-2">
-                  <TextInput
+                  <Input
                     type="number"
                     value={form.contract_duration_months}
                     onChange={e => set('contract_duration_months', e.target.value)}
-                    style={{ width: '5rem' }}
+                    className="w-20"
                   />
                   <span className="text-sm text-muted-foreground">Monat</span>
                 </div>
@@ -353,21 +366,21 @@ function MembershipTypeDialogForm({ editItem, onOpenChange, onSave, saving }: Me
             </div>
 
             <div>
-              <p className="text-xs uppercase text-muted-foreground mb-1">Kündigungsfrist</p>
+              <Label className="text-xs uppercase text-muted-foreground">Kündigungsfrist</Label>
               <div className="flex items-center gap-2">
-                <TextInput
+                <Input
                   type="number"
                   value={form.cancellation_notice_days}
                   onChange={e => set('cancellation_notice_days', e.target.value)}
-                  style={{ width: '5rem' }}
+                  className="w-20"
                 />
                 <span className="text-sm text-muted-foreground">Monat</span>
-                <Select
-                  value={form.cancellation_notice_basis}
-                  onChange={v => set('cancellation_notice_basis', v ?? 'FROM_CANCELLATION')}
-                  data={CANCELLATION_BASIS.map(cb => ({ value: cb.value, label: cb.label }))}
-                  style={{ width: '260px' }}
-                />
+                <Select value={form.cancellation_notice_basis} onValueChange={v => set('cancellation_notice_basis', v)}>
+                  <SelectTrigger className="w-[260px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {CANCELLATION_BASIS.map(cb => <SelectItem key={cb.value} value={cb.value}>{cb.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -383,25 +396,25 @@ function MembershipTypeDialogForm({ editItem, onOpenChange, onSave, saving }: Me
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-xs uppercase text-muted-foreground mb-1">Vertragsverlängerung</p>
+                    <Label className="text-xs uppercase text-muted-foreground">Vertragsverlängerung</Label>
                     <div className="flex items-center gap-2">
-                      <TextInput
+                      <Input
                         type="number"
                         value={form.renewal_duration_months}
                         onChange={e => set('renewal_duration_months', e.target.value)}
-                        style={{ width: '5rem' }}
+                        className="w-20"
                       />
                       <span className="text-sm text-muted-foreground">Monat</span>
                     </div>
                   </div>
                   <div>
-                    <p className="text-xs uppercase text-muted-foreground mb-1">Kündigungsfrist für Vertragsverlängerung</p>
+                    <Label className="text-xs uppercase text-muted-foreground">Kündigungsfrist für Vertragsverlängerung</Label>
                     <div className="flex items-center gap-2">
-                      <TextInput
+                      <Input
                         type="number"
                         value={form.renewal_cancellation_days}
                         onChange={e => set('renewal_cancellation_days', e.target.value)}
-                        style={{ width: '5rem' }}
+                        className="w-20"
                       />
                       <span className="text-sm text-muted-foreground">Monat Vom Kündigungszeitpunkt</span>
                     </div>
@@ -433,28 +446,30 @@ function MembershipTypeDialogForm({ editItem, onOpenChange, onSave, saving }: Me
                     return (
                       <tr key={i} className="border-b">
                         <td className="p-2">
-                          <Select
-                            value={row.billing_period}
-                            onChange={v => updatePricing(i, 'billing_period', v ?? 'MONTHLY')}
-                            data={BILLING_PERIODS.map(bp => ({ value: bp.value, label: bp.label }))}
-                            style={{ width: '140px' }}
-                          />
+                          <Select value={row.billing_period} onValueChange={v => updatePricing(i, 'billing_period', v)}>
+                            <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {BILLING_PERIODS.map(bp => (
+                                <SelectItem key={bp.value} value={bp.value}>{bp.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </td>
                         <td className="p-2">
-                          <TextInput
+                          <Input
                             type="number"
                             step="0.01"
                             placeholder="0,00"
                             value={row.price}
                             onChange={e => updatePricing(i, 'price', e.target.value)}
-                            style={{ width: '120px' }}
+                            className="w-[120px]"
                           />
                         </td>
                         <td className="p-2 text-muted-foreground">{monthly.toFixed(2)}</td>
                         <td className="p-2 text-muted-foreground">{total.toFixed(2)}</td>
                         <td className="p-2">
                           {form.pricing.length > 1 && (
-                            <Button variant="subtle" color="red" size="compact-sm" px={4} onClick={() => removePricingRow(i)}>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removePricingRow(i)}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           )}
@@ -474,36 +489,75 @@ function MembershipTypeDialogForm({ editItem, onOpenChange, onSave, saving }: Me
                 </button>
               )}
             </div>
-          </div>
-        </Tabs.Panel>
+          </TabsContent>
 
-        {/* ─── Tab: Automatisierung ─── */}
-        <Tabs.Panel value="automatisierung" pt="md">
-          <div className="space-y-6">
+          {/* ─── Tab: Automatisierung ─── */}
+          <TabsContent value="automatisierung" className="space-y-6 mt-4">
+            <div className="flex items-center justify-between p-4 border rounded-md">
+              <div>
+                <Label className="font-medium">Selbstregistrierung aktivieren</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Mitglieder können sich online für diese Mitgliedsart anmelden
+                </p>
+              </div>
+              <Switch
+                checked={form.self_registration_enabled}
+                onCheckedChange={v => set('self_registration_enabled', v)}
+              />
+            </div>
+
+            <div className="flex items-center justify-between p-4 border rounded-md">
+              <div>
+                <Label className="font-medium">Familientarif</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Vertrag gilt für ein Familienprofil (Festpreis für alle Familienmitglieder)
+                </p>
+              </div>
+              <Switch
+                checked={form.is_family_tarif}
+                onCheckedChange={v => set('is_family_tarif', v)}
+              />
+            </div>
+
+            {form.is_family_tarif && (
+              <div>
+                <Label className="text-xs uppercase text-muted-foreground">Mindestanzahl Familienmitglieder</Label>
+                <Input
+                  type="number"
+                  min="2"
+                  value={form.min_family_members}
+                  onChange={e => set('min_family_members', e.target.value)}
+                  className="w-24"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Ein Familienprofil muss mindestens diese Anzahl Mitglieder haben
+                </p>
+              </div>
+            )}
+
             <div>
-              <TextInput
-                label={<span className="text-xs uppercase text-muted-foreground">Sortierung</span>}
+              <Label className="text-xs uppercase text-muted-foreground">Sortierung</Label>
+              <Input
                 type="number"
                 value={form.sort_order}
                 onChange={e => set('sort_order', e.target.value)}
-                style={{ width: '6rem' }}
+                className="w-24"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Bestimmt die Reihenfolge in Listen
+                Bestimmt die Reihenfolge in Listen und bei der Selbstregistrierung
               </p>
             </div>
-          </div>
-        </Tabs.Panel>
-      </Tabs>
+          </TabsContent>
+        </Tabs>
 
-      {/* Footer */}
-      <div className="flex justify-end gap-3 pt-4 border-t mt-4">
-        <Button onClick={handleSave} disabled={!form.name || saving}>
-          {saving ? 'SPEICHERN...' : 'SPEICHERN'}
-        </Button>
-        <Button variant="outline" onClick={() => onOpenChange(false)}>SCHLIESSEN</Button>
-      </div>
-
-    </>
+        {/* Footer */}
+        <div className="flex justify-end gap-3 pt-4 border-t mt-4">
+          <Button onClick={handleSave} disabled={!form.name || saving}>
+            {saving ? 'SPEICHERN...' : 'SPEICHERN'}
+          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>SCHLIESSEN</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

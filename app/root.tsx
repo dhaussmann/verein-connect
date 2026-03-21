@@ -4,61 +4,31 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
-} from "react-router";
-import { useState } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MantineProvider, createTheme } from "@mantine/core";
-import { Notifications } from "@mantine/notifications";
-import { ModalsProvider } from "@mantine/modals";
-import appCss from "./app.css?url";
+  isRouteErrorResponse,
+} from 'react-router';
+import { ColorSchemeScript, MantineProvider, createTheme } from '@mantine/core';
+import { Notifications } from '@mantine/notifications';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import '@mantine/core/styles.css';
+import '@mantine/dates/styles.css';
+import '@mantine/notifications/styles.css';
+import '@mantine/tiptap/styles.css';
 
-export const links = () => [{ rel: "stylesheet", href: appCss }];
+const theme = createTheme({
+  primaryColor: 'blue',
+  fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
+  defaultRadius: 'md',
+});
 
-const mantineTheme = createTheme({
-  fontFamily: "Inter, system-ui, sans-serif",
-  primaryColor: "blue",
-  primaryShade: 7,
-  colors: {
-    // Custom primary blue matching the current design (hsl 207 62% 28%)
-    vcBlue: [
-      "#e8f0f8",
-      "#cddaee",
-      "#a4bfde",
-      "#7aa3cd",
-      "#578bbf",
-      "#407db4",
-      "#3275ae",
-      "#265e8f", // primary (hsl 207 62% 28%)
-      "#1f4e77",
-      "#163d5e",
-    ],
-  },
-  defaultRadius: "sm",
-  components: {
-    Button: {
-      defaultProps: {
-        radius: "sm",
-      },
-    },
-    Input: {
-      defaultProps: {
-        radius: "sm",
-      },
-    },
-    Select: {
-      defaultProps: {
-        radius: "sm",
-      },
-    },
-    Modal: {
-      defaultProps: {
-        radius: "sm",
-      },
-    },
-    Card: {
-      defaultProps: {
-        radius: "sm",
-        withBorder: true,
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
+      refetchOnWindowFocus: false,
+      retry: (failureCount, error: any) => {
+        if (error?.status === 401 || error?.status === 403) return false;
+        return failureCount < 2;
       },
     },
   },
@@ -70,11 +40,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <ColorSchemeScript defaultColorScheme="light" />
         <Meta />
         <Links />
       </head>
       <body>
-        {children}
+        <MantineProvider theme={theme} defaultColorScheme="light">
+          <Notifications position="top-right" />
+          <QueryClientProvider client={queryClient}>
+            {children}
+          </QueryClientProvider>
+        </MantineProvider>
         <ScrollRestoration />
         <Scripts />
       </body>
@@ -83,49 +59,42 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            staleTime: 30_000,
-          },
-        },
-      }),
-  );
-
-  return (
-    <MantineProvider theme={mantineTheme}>
-      <Notifications position="top-right" />
-      <ModalsProvider>
-        <QueryClientProvider client={queryClient}>
-          <Outlet />
-        </QueryClientProvider>
-      </ModalsProvider>
-    </MantineProvider>
-  );
+  return <Outlet />;
 }
 
-export function ErrorBoundary() {
+export function ErrorBoundary({ error }: { error: unknown }) {
+  let message = 'Oops!';
+  let details = 'Ein unerwarteter Fehler ist aufgetreten.';
+  let stack: string | undefined;
+
+  if (isRouteErrorResponse(error)) {
+    message = error.status === 404 ? '404' : 'Fehler';
+    details =
+      error.status === 404
+        ? 'Die angeforderte Seite wurde nicht gefunden.'
+        : error.statusText || details;
+  } else if (import.meta.env.DEV && error && error instanceof Error) {
+    details = error.message;
+    stack = error.stack;
+  }
+
   return (
-    <html lang="de">
-      <head>
-        <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Fehler – Verein Connect</title>
-      </head>
-      <body>
-        <div
+    <main style={{ padding: '2rem', textAlign: 'center' }}>
+      <h1>{message}</h1>
+      <p>{details}</p>
+      {stack && (
+        <pre
           style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            minHeight: "100vh",
+            width: '100%',
+            padding: '1rem',
+            overflow: 'auto',
+            textAlign: 'left',
+            fontSize: '0.8rem',
           }}
         >
-          <p>Ein unerwarteter Fehler ist aufgetreten.</p>
-        </div>
-      </body>
-    </html>
+          {stack}
+        </pre>
+      )}
+    </main>
   );
 }

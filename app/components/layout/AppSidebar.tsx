@@ -1,15 +1,16 @@
-import { NavLink, useFetcher, useMatches } from "react-router";
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, UsersRound, GraduationCap, Calendar,
-  ClipboardCheck, MessageSquare, Receipt,
-  Settings, ChevronLeft, ChevronRight, ChevronDown, LogOut,
+  ClipboardCheck, MessageSquare, Receipt, ShoppingBag,
+  FolderArchive, Settings, ChevronLeft, ChevronRight, ChevronDown, LogOut,
   User, BookOpen, FileText, ClipboardList, CreditCard, SlidersHorizontal,
-  ListChecks,
+  ListChecks, Heart, Shield, Columns3, Bell, Puzzle, Lock, UserCog,
 } from 'lucide-react';
-import { cn } from '@/core/lib/utils';
-import { useEffect, useState } from 'react';
-import { Badge } from '@mantine/core';
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { useAuthStore } from '@/stores/authStore';
+import { useOrganizationSettings } from '@/hooks/use-api';
+import { cn } from '@/lib/utils';
+import { useState } from 'react';
+import { Badge } from '@/components/ui/badge';
 
 interface NavItem {
   title: string;
@@ -20,9 +21,15 @@ interface NavItem {
 
 const adminNavItems: NavItem[] = [
   { title: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-  { title: 'Mitglieder', path: '/members', icon: Users },
-  { title: 'Gruppen', path: '/groups', icon: UsersRound },
-  { title: 'Kurse', path: '/courses', icon: GraduationCap },
+  {
+    title: 'Mitglieder', path: '/members', icon: Users,
+    children: [
+      { title: 'Verwaltung', path: '/members', icon: ListChecks },
+      { title: 'Gruppen', path: '/groups', icon: UsersRound },
+      { title: 'Familien', path: '/families', icon: Heart },
+    ],
+  },
+  { title: 'Training', path: '/courses', icon: GraduationCap },
   { title: 'Termine', path: '/events', icon: Calendar },
   { title: 'Anwesenheit', path: '/attendance', icon: ClipboardCheck },
   { title: 'Kommunikation', path: '/communication', icon: MessageSquare },
@@ -36,13 +43,28 @@ const adminNavItems: NavItem[] = [
     ],
   },
   { title: 'Finanzen', path: '/finance', icon: Receipt },
-  { title: 'Einstellungen', path: '/settings', icon: Settings },
+  { title: 'Webshop', path: '/shop', icon: ShoppingBag },
+  { title: 'Materialbank', path: '/files', icon: FolderArchive },
+  {
+    title: 'Einstellungen', path: '/settings', icon: Settings,
+    children: [
+      { title: 'Benutzer', path: '/settings/users', icon: Users },
+      { title: 'Allgemein', path: '/settings/general', icon: SlidersHorizontal },
+      { title: 'Mitglieder', path: '/settings/members', icon: UserCog },
+      { title: 'Rollen & Berechtigungen', path: '/settings/roles', icon: Shield },
+      { title: 'Profilfelder', path: '/settings/fields', icon: Columns3 },
+      { title: 'Materialbank', path: '/settings/materialbank', icon: FolderArchive },
+      { title: 'Benachrichtigungen', path: '/settings/notifications', icon: Bell },
+      { title: 'Integrationen', path: '/settings/integrations', icon: Puzzle },
+      { title: 'DSGVO & Datenschutz', path: '/settings/gdpr', icon: Lock },
+    ],
+  },
 ];
 
 const memberNavItems: NavItem[] = [
   { title: 'Übersicht', path: '/portal', icon: LayoutDashboard },
   { title: 'Mein Profil', path: '/portal/profile', icon: User },
-  { title: 'Meine Kurse', path: '/portal/courses', icon: GraduationCap },
+  { title: 'Mein Training', path: '/portal/courses', icon: GraduationCap },
   { title: 'Meine Anwesenheit', path: '/portal/attendance', icon: ClipboardCheck },
 ];
 
@@ -54,20 +76,23 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: AppSidebarProps) {
-  const user = useCurrentUser();
-  const matches = useMatches();
-  const logoutFetcher = useFetcher();
-  const currentPath = matches[matches.length - 1]?.pathname ?? "/";
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuthStore();
+  const { data: orgData } = useOrganizationSettings();
+  const org = orgData as any;
+  const apiBase = import.meta.env.VITE_API_URL || 'https://verein-connect-api.cloudflareone-demo-account.workers.dev';
+  const logoSrc = org?.logoUrl ? `${apiBase}${org.logoUrl}` : null;
 
   const isChildActive = (item: NavItem) =>
-    item.children?.some((child) => currentPath === child.path || currentPath.startsWith(child.path + "/"));
+    item.children?.some(c => location.pathname === c.path || location.pathname.startsWith(c.path + '/'));
 
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     adminNavItems.forEach(item => {
       if (item.children) {
         const childPaths = item.children.map(c => c.path);
-        if (childPaths.some((path) => currentPath === path || currentPath.startsWith(path + "/"))) {
+        if (childPaths.some(p => location.pathname === p || location.pathname.startsWith(p + '/'))) {
           initial[item.path] = true;
         }
       }
@@ -75,28 +100,13 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: A
     return initial;
   });
 
-  useEffect(() => {
-    setOpenMenus((prev) => {
-      const next = { ...prev };
-
-      adminNavItems.forEach((item) => {
-        if (!item.children) return;
-
-        const shouldBeOpen = item.children.some(
-          (child) => currentPath === child.path || currentPath.startsWith(child.path + "/"),
-        );
-
-        if (shouldBeOpen) {
-          next[item.path] = true;
-        }
-      });
-
-      return next;
-    });
-  }, [currentPath]);
-
   const toggleMenu = (path: string) =>
     setOpenMenus(prev => ({ ...prev, [path]: !prev[path] }));
+
+  const handleNav = (path: string) => {
+    navigate(path);
+    onMobileClose();
+  };
 
   const roleLabels: Record<string, string> = {
     admin: 'Administrator',
@@ -108,13 +118,13 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: A
     const hasChildren = !!item.children?.length;
     const isOpen = !!openMenus[item.path];
     const childActive = hasChildren && isChildActive(item);
-    const isActive = !hasChildren && (currentPath === item.path || currentPath.startsWith(item.path + "/"));
+    const isActive = !hasChildren && (location.pathname === item.path || location.pathname.startsWith(item.path + '/'));
 
     if (hasChildren) {
       return (
         <div key={item.path}>
           <button
-            onClick={() => toggleMenu(item.path)}
+            onClick={() => collapsed ? handleNav(item.path) : toggleMenu(item.path)}
             className={cn(
               'w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors duration-150 relative',
               childActive
@@ -137,25 +147,27 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: A
           {!collapsed && isOpen && (
             <div className="ml-4 border-l border-border">
               {item.children!.map(child => {
-                const isChildItemActive = currentPath === child.path
-                  || (currentPath.startsWith(child.path + '/') && child.path !== '/contracts');
+                const siblings = item.children!.filter(s => s.path !== child.path);
+                const matchedBySibling = siblings.some(s => location.pathname === s.path || location.pathname.startsWith(s.path + '/'));
+                const isExactMatch = location.pathname === child.path;
+                const isSubPath = location.pathname.startsWith(child.path + '/');
+                // If child.path equals parent path (e.g. /members under Mitglieder), treat sub-paths as active only if no sibling matches
+                const isChildItemActive = isExactMatch
+                  || (isSubPath && (child.path !== item.path || !matchedBySibling));
                 return (
-                  <NavLink
+                  <button
                     key={child.path}
-                    to={child.path}
-                    className={() =>
-                      cn(
-                        'w-full flex items-center gap-3 pl-4 pr-4 py-2 text-sm transition-colors duration-150 relative',
-                        isChildItemActive
-                          ? 'bg-accent text-accent-foreground font-medium'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                      )
-                    }
-                    onClick={onMobileClose}
+                    onClick={() => handleNav(child.path)}
+                    className={cn(
+                      'w-full flex items-center gap-3 pl-4 pr-4 py-2 text-sm transition-colors duration-150 relative',
+                      isChildItemActive
+                        ? 'bg-accent text-accent-foreground font-medium'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                    )}
                   >
                     <child.icon className="h-4 w-4 shrink-0" />
                     <span>{child.title}</span>
-                  </NavLink>
+                  </button>
                 );
               })}
             </div>
@@ -165,26 +177,23 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: A
     }
 
     return (
-      <NavLink
+      <button
         key={item.path}
-        to={item.path}
-        onClick={onMobileClose}
-        className={() =>
-          cn(
-            'w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors duration-150 relative',
-            isActive
-              ? 'bg-accent text-accent-foreground font-medium'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-            collapsed && 'justify-center px-0'
-          )
-        }
+        onClick={() => handleNav(item.path)}
+        className={cn(
+          'w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors duration-150 relative',
+          isActive
+            ? 'bg-accent text-accent-foreground font-medium'
+            : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+          collapsed && 'justify-center px-0'
+        )}
       >
         {isActive && (
           <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r" />
         )}
         <item.icon className={cn('h-5 w-5 shrink-0', collapsed ? '' : 'ml-1')} />
         {!collapsed && <span>{item.title}</span>}
-      </NavLink>
+      </button>
     );
   };
 
@@ -192,12 +201,18 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: A
     <div className="flex flex-col h-full bg-popover border-r border-border">
       {/* Header */}
       <div className="flex items-center gap-3 p-4 border-b border-border min-h-[64px]">
-        <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center shrink-0">
-          <span className="text-primary-foreground font-bold text-sm">CB</span>
-        </div>
+        {logoSrc ? (
+          <img src={logoSrc} alt="" className="w-8 h-8 rounded-md object-contain shrink-0" />
+        ) : (
+          <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center shrink-0">
+            <span className="text-primary-foreground font-bold text-sm">
+              {(org?.name || user?.clubName || 'VC').slice(0, 2).toUpperCase()}
+            </span>
+          </div>
+        )}
         {!collapsed && (
           <div className="overflow-hidden">
-            <p className="font-semibold text-sm truncate">{user?.clubName || 'Clubboard'}</p>
+            <p className="font-semibold text-sm truncate">{org?.name || user?.clubName || 'Verein Connect'}</p>
             <p className="text-xs text-muted-foreground truncate">Vereinsverwaltung</p>
           </div>
         )}
@@ -224,15 +239,13 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: A
           )}
         </div>
         {!collapsed && (
-          <logoutFetcher.Form method="post" action="/logout">
-            <button
-              type="submit"
-              className="mt-3 w-full flex items-center gap-2 text-sm text-muted-foreground hover:text-destructive transition-colors"
-            >
-              <LogOut className="h-4 w-4" />
-              Abmelden
-            </button>
-          </logoutFetcher.Form>
+          <button
+            onClick={logout}
+            className="mt-3 w-full flex items-center gap-2 text-sm text-muted-foreground hover:text-destructive transition-colors"
+          >
+            <LogOut className="h-4 w-4" />
+            Abmelden
+          </button>
         )}
       </div>
 

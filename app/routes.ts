@@ -1,78 +1,71 @@
-import { type RouteConfig, index, route, layout } from "@react-router/dev/routes";
+import { type RouteConfig, index, layout, route } from '@react-router/dev/routes';
 
 export default [
-  // Root redirect
-  index("routes/index.tsx"),
+  // Auth catch-all for better-auth
+  route('api/auth/*', 'routes/api.auth.$.tsx'),
 
-  // Auth routes (no layout)
-  route("login", "routes/auth/login.tsx"),
-  route("reset-password", "routes/auth/reset-password.tsx"),
-  route("join/:slug", "routes/public/join.$slug.tsx"),
-  route("forgot-password", "routes/auth/forgot-password.tsx"),
-  route("logout", "routes/auth/logout.tsx"),
-  route("api/auth/*", "routes/api.auth.$.ts"),
-  route("system/run-cron", "routes/system/run-cron.ts"),
+  // Index redirect
+  index('routes/_index.tsx'),
 
-  // Protected layout routes
-  layout("routes/_layout.tsx", [
-    route("dashboard", "routes/dashboard/index.tsx"),
+  // Auth layout (login, register, forgot-password)
+  layout('routes/_auth.tsx', [
+    route('login', 'routes/_auth.login.tsx'),
+    route('register', 'routes/_auth.register.tsx'),
+    route('forgot-password', 'routes/_auth.forgot-password.tsx'),
+  ]),
+
+  // App layout (authenticated)
+  layout('routes/_app.tsx', [
+    route('dashboard', 'routes/_app.dashboard.tsx'),
 
     // Members
-    route("members", "routes/members/index.tsx"),
-    route("members/new", "routes/members/new.tsx"),
-    route("members/:id", "routes/members/$id.tsx"),
+    route('members', 'routes/_app.members.tsx'),
+    route('members/new', 'routes/_app.members.new.tsx'),
+    route('members/:id', 'routes/_app.members.$id.tsx'),
 
     // Courses
-    route("courses", "routes/courses/index.tsx"),
-    route("courses/new", "routes/courses/new.tsx"),
-    route("courses/:id", "routes/courses/$id.tsx"),
+    route('courses', 'routes/_app.courses.tsx'),
+    route('courses/new', 'routes/_app.courses.new.tsx'),
+    route('courses/:id', 'routes/_app.courses.$id.tsx'),
 
     // Events
-    route("events", "routes/events/index.tsx"),
-    route("events/new", "routes/events/new.tsx"),
-    route("events/:id", "routes/events/$id.tsx"),
+    route('events', 'routes/_app.events.tsx'),
+    route('events/:id', 'routes/_app.events.$id.tsx'),
 
     // Attendance
-    route("attendance", "routes/attendance/index.tsx"),
-    route("attendance/:eventId", "routes/attendance/$eventId.tsx"),
+    route('attendance', 'routes/_app.attendance.tsx'),
 
     // Communication
-    route("communication", "routes/communication/index.tsx"),
-    route("communication/email", "routes/communication/email.tsx"),
+    route('communication', 'routes/_app.communication.tsx'),
 
     // Contracts
-    route("contracts", "routes/contracts/index.tsx"),
-    route("contracts/new", "routes/contracts/new.tsx"),
-    route("contracts/settings", "routes/contracts/settings.tsx"),
-    route("contracts/:id", "routes/contracts/$id.tsx"),
+    route('contracts', 'routes/_app.contracts.tsx'),
+    route('contracts/new', 'routes/_app.contracts.new.tsx'),
+    route('contracts/settings', 'routes/_app.contracts.settings.tsx'),
+    route('contracts/:id', 'routes/_app.contracts.$id.tsx'),
 
-    // Contract-related
-    route("billing", "routes/billing/index.tsx"),
-    route("applications", "routes/applications/index.tsx"),
+    // Billing & Applications
+    route('billing', 'routes/_app.billing.tsx'),
+    route('applications', 'routes/_app.applications.tsx'),
+
+    // Families
+    route('families', 'routes/_app.families.tsx'),
+    route('families/:id', 'routes/_app.families.$id.tsx'),
 
     // Groups
-    route("groups", "routes/groups/index.tsx"),
-    route("groups/:id", "routes/groups/$id.tsx"),
+    route('groups', 'routes/_app.groups.tsx'),
+    route('groups/:id', 'routes/_app.groups.$id.tsx'),
 
-    // Finance
-    route("finance", "routes/finance/index.tsx"),
-    route("finance/accounting", "routes/finance/accounting.tsx"),
+    // Finance, Shop, Files, Settings
+    route('finance', 'routes/_app.finance.tsx'),
+    route('shop', 'routes/_app.shop.tsx'),
+    route('files', 'routes/_app.files.tsx'),
+    route('settings', 'routes/_app.settings.tsx'),
 
-    // Other
-    route("settings", "routes/settings/layout.tsx", [
-      index("routes/settings/index.tsx"),
-      route("users", "routes/settings/users.tsx"),
-      route("roles", "routes/settings/roles.tsx"),
-      route("fields", "routes/settings/fields.tsx"),
-      route("notifications", "routes/settings/notifications.tsx"),
-      route("integrations", "routes/settings/integrations.tsx"),
-      route("gdpr", "routes/settings/gdpr.tsx"),
-    ]),
-
-    // Member portal
-    route("portal", "routes/portal/index.tsx"),
-    route("portal/profile", "routes/portal/profile.tsx"),
-    route("portal/courses", "routes/portal/courses.tsx"),
-    route("portal/attendance", "routes/portal/attendance.tsx"),
+    // Member Portal
+    route('portal', 'routes/_app.portal.tsx'),
+    route('portal/profile', 'routes/_app.portal.profile.tsx'),
+    route('portal/courses', 'routes/_app.portal.courses.tsx'),
+    route('portal/attendance', 'routes/_app.portal.attendance.tsx'),
   ]),
 ] satisfies RouteConfig;
