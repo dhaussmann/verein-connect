@@ -1,4 +1,6 @@
 import { betterAuth } from 'better-auth';
+import { Kysely } from 'kysely';
+import { D1Dialect } from 'kysely-d1';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, and } from 'drizzle-orm';
 import { hash, compare } from 'bcryptjs';
@@ -6,11 +8,10 @@ import { users, roles, userRoles, organizations } from '../db/schema';
 import type { Env } from '../types/env';
 
 export function createAuth(env: Env) {
+  const kyselyDb = new Kysely({ dialect: new D1Dialect({ database: env.DB }) });
   return betterAuth({
-    database: {
-      type: 'd1',
-      db: env.DB,
-    },
+    baseURL: 'https://verein-connect.cloudflareone-demo-account.workers.dev',
+    database: { db: kyselyDb, type: 'sqlite' },
     secret: env.BETTER_AUTH_SECRET,
     emailAndPassword: {
       enabled: true,
@@ -39,12 +40,38 @@ export function createAuth(env: Env) {
     },
     account: {
       modelName: 'auth_accounts',
+      fields: {
+        accountId: 'account_id',
+        providerId: 'provider_id',
+        userId: 'user_id',
+        accessToken: 'access_token',
+        refreshToken: 'refresh_token',
+        idToken: 'id_token',
+        accessTokenExpiresAt: 'access_token_expires_at',
+        refreshTokenExpiresAt: 'refresh_token_expires_at',
+        createdAt: 'created_at',
+        updatedAt: 'updated_at',
+        password: 'password_hash',
+      },
     },
     session: {
       modelName: 'auth_sessions',
+      fields: {
+        userId: 'user_id',
+        expiresAt: 'expires_at',
+        ipAddress: 'ip_address',
+        userAgent: 'user_agent',
+        createdAt: 'created_at',
+        updatedAt: 'updated_at',
+      },
     },
     verification: {
       modelName: 'auth_verifications',
+      fields: {
+        expiresAt: 'expires_at',
+        createdAt: 'created_at',
+        updatedAt: 'updated_at',
+      },
     },
   });
 }
