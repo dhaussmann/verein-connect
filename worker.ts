@@ -6,6 +6,20 @@ import type { Env } from "./app/core/types/bindings";
 const handler = createRequestHandler({ build });
 type HandlerContext = Parameters<typeof handler>[0];
 
+// Stub classes for legacy Durable Objects (required by existing DO bindings)
+export class ChatRoomDO {
+  constructor(private state: DurableObjectState) {}
+  async fetch(_request: Request) {
+    return new Response("Deprecated", { status: 410 });
+  }
+}
+export class EventStatsDO {
+  constructor(private state: DurableObjectState) {}
+  async fetch(_request: Request) {
+    return new Response("Deprecated", { status: 410 });
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const context: HandlerContext = {

@@ -12,10 +12,23 @@ export default defineConfig({
       overlay: false,
     },
   },
-  plugins: [cloudflareDevProxy(), reactRouter()],
+  plugins: [
+    cloudflareDevProxy(),
+    reactRouter(),
+    {
+      name: "react-dom-server-edge",
+      enforce: "pre",
+      resolveId(source) {
+        if (source === "react-dom/server" || source === "react-dom/server.browser") {
+          return this.resolve("react-dom/server.edge");
+        }
+      },
+    },
+  ],
   ssr: {
     resolve: {
       conditions: ["workerd", "worker", "browser"],
+      externalConditions: ["workerd", "worker"],
     },
   },
   resolve: {
