@@ -3,6 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { drizzle } from "drizzle-orm/d1";
 import { authAccounts, authSessions, authVerifications, users } from "@/core/db/schema";
 import type { Env } from "./session.server";
+import bcrypt from "bcryptjs";
 
 const betterAuthSchema = {
   user: users,
@@ -63,6 +64,14 @@ export function getBetterAuth(request: Request, env: Env) {
       enabled: true,
       disableSignUp: true,
       revokeSessionsOnPasswordReset: true,
+      password: {
+        hash: async (password: string) => {
+          return bcrypt.hash(password, 12);
+        },
+        verify: async ({ hash, password }: { hash: string; password: string }) => {
+          return bcrypt.compare(password, hash);
+        },
+      },
       sendResetPassword: async ({ user, url }) => {
         await sendResetPasswordEmail(env, user.email, url);
       },
