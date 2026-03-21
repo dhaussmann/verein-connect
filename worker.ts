@@ -1,31 +1,28 @@
-import { createRequestHandler } from 'react-router';
+import { createRequestHandler } from '@react-router/cloudflare';
+import * as build from './build/server';
 import { api } from './app/core/api';
+import type { Env } from './app/core/types/env';
 
-declare module 'react-router' {
-  export interface AppLoadContext {
-    cloudflare: {
-      env: {
-        DB: D1Database;
-        FILES: R2Bucket;
-        KV: KVNamespace;
-        CHAT_ROOM: DurableObjectNamespace;
-        EVENT_STATS: DurableObjectNamespace;
-        BETTER_AUTH_SECRET: string;
-        RESEND_API_KEY: string;
-      };
-      ctx: ExecutionContext;
-    };
+const handler = createRequestHandler({ build });
+type HandlerContext = Parameters<typeof handler>[0];
+
+// Stub Durable Object classes (required by wrangler even if unused)
+export class ChatRoomDO {
+  constructor(private state: DurableObjectState) {}
+  async fetch(_request: Request) {
+    return new Response('Deprecated', { status: 410 });
   }
 }
 
-const requestHandler = createRequestHandler(
-  // @ts-expect-error - virtual module provided by React Router at build time
-  () => import('virtual:react-router/server-build'),
-  import.meta.env.MODE,
-);
+export class EventStatsDO {
+  constructor(private state: DurableObjectState) {}
+  async fetch(_request: Request) {
+    return new Response('Deprecated', { status: 410 });
+  }
+}
 
 export default {
-  async fetch(request: Request, env: any, ctx: ExecutionContext) {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url);
 
     // Route /api/v1/* requests to the Hono API
@@ -34,23 +31,20 @@ export default {
     }
 
     // Everything else goes to React Router SSR
-    return requestHandler(request, {
-      cloudflare: { env: env as any, ctx },
-    });
+    const context: HandlerContext = {
+      request: request as HandlerContext['request'],
+      functionPath: '/',
+      waitUntil: ctx.waitUntil.bind(ctx),
+      passThroughOnException: ctx.passThroughOnException.bind(ctx),
+      next: async () => new Response('Not Found', { status: 404 }),
+      env: {
+        ...env,
+        ASSETS: { fetch },
+      },
+      params: {},
+      data: {},
+    };
+
+    return handler(context);
   },
-} satisfies ExportedHandler;
-
-// Stub Durable Object classes (required by wrangler even if unused)
-export class ChatRoomDO {
-  constructor(private state: DurableObjectState) {}
-  async fetch(request: Request) {
-    return new Response('Not implemented', { status: 501 });
-  }
-}
-
-export class EventStatsDO {
-  constructor(private state: DurableObjectState) {}
-  async fetch(request: Request) {
-    return new Response('Not implemented', { status: 501 });
-  }
-}
+};
