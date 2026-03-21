@@ -26,5 +26,17 @@ id = "1cb5f2cd8bac48c38addcc6810f931c7"
 [triggers]
 crons = ["0 8 * * 1", "0 2 * * *", "0 3 * * *", "0 0 1 * *"]
 
+[[durable_objects.bindings]]
+name = "CHAT_ROOM"
+class_name = "ChatRoomDO"
+
+[[durable_objects.bindings]]
+name = "EVENT_STATS"
+class_name = "EventStatsDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChatRoomDO", "EventStatsDO"]
+
 [vars]
 FRONTEND_URL = "https://verein-connect.pages.dev"
